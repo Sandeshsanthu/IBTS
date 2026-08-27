@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="b8e1a2c4-484b-44c6-a38c-9f6b2489f824" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/idempotency-guard/app/config.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/idempotency-guard/test-idempotency.ps1" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/localstack/init/ready.d/01_create_tables.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" />
-    </list>
+    <list default="true" id="b8e1a2c4-484b-44c6-a38c-9f6b2489f824" name="Changes" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
