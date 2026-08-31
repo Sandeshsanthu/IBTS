@@ -1,0 +1,4 @@
+{
+  "request": { "method": "POST", "url": "/mock/sbi/txn/fail/fallback" },
+  "response": { "status": 503 }
+}

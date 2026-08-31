@@ -1,0 +1,8 @@
+{
+  "request": { "method": "POST", "url": "/mock/sbi/txn" },
+  "response": {
+    "status": 200,
+    "jsonBody": { "sbiRefNo": "SBI123456789", "respCode": "00" },
+    "headers": { "Content-Type": "application/json" }
+  }
+}

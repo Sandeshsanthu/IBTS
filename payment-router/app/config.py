@@ -4,20 +4,20 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    app_name: str       = "payment-router"
-    port: int           = 8081
+    app_name: str           = "payment-router"
+    port: int               = 8081
 
-    # DynamoDB
-    aws_region: str         = "ap-south-1"
-    dynamo_endpoint: str    = "http://dynamodb-local:8000"
-    aws_access_key: str     = "local"
-    aws_secret_key: str     = "local"
-    routing_table_name: str = "routing-table"
+    # DynamoDB — matches docker-compose env var names exactly
+    aws_region: str             = "ap-south-1"
+    dynamo_endpoint: str        = "http://localstack:4566"   # ← localstack, not dynamodb-local
+    aws_access_key_id: str      = "test"                     # ← matches AWS_ACCESS_KEY_ID
+    aws_secret_access_key: str  = "test"                     # ← matches AWS_SECRET_ACCESS_KEY
+    routing_table_name: str     = "routing-table"
 
     # Redis
-    redis_host: str     = "redis"
-    redis_port: int     = 6379
-    cache_ttl_seconds: int = 300
+    redis_host: str         = "redis"
+    redis_port: int         = 6379
+    cache_ttl_seconds: int  = 300
 
     class Config:
         env_file = ".env"

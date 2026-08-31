@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Idempotency Guard",
-    description="Atomic idempotency service for IBTS payment switch",
+    description="Atomic idempotency services for IBTS payment switch",
     version="2.0.0",
     lifespan=lifespan,
 )

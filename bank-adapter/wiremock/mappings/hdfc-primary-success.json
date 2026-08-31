@@ -1,0 +1,8 @@
+{
+  "request": { "method": "POST", "url": "/mock/hdfc/txn" },
+  "response": {
+    "status": 200,
+    "jsonBody": { "hdfcRefId": "HDFC987654321", "statusCode": "0" },
+    "headers": { "Content-Type": "application/json" }
+  }
+}

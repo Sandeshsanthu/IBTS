@@ -31,8 +31,8 @@ class RoutingRepository:
             "dynamodb",
             region_name          = settings.aws_region,
             endpoint_url         = settings.dynamo_endpoint,
-            aws_access_key_id    = settings.aws_access_key,
-            aws_secret_access_key= settings.aws_secret_key,
+            aws_access_key_id    = settings.aws_access_key_id,
+            aws_secret_access_key= settings.aws_secret_access_key,
         )
         self._table = None
         self._init_table()

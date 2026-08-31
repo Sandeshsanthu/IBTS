@@ -1,0 +1,4 @@
+{
+  "request": { "method": "POST", "url": "/mock/icici/txn" },
+  "response": { "status": 503 }
+}

@@ -3,6 +3,7 @@
 
 import json
 import logging
+from decimal import Decimal
 from app.config import settings
 from app.models import RouteRequest, RouteResponse
 from app.resolvers.vpa_resolver import resolve_vpa
@@ -13,6 +14,15 @@ import redis as redis_lib
 logger = logging.getLogger(__name__)
 
 CACHE_PREFIX = "route:"
+
+
+class DecimalEncoder(json.JSONEncoder):
+    """boto3 DynamoDB resource returns Decimal — json.dumps needs this."""
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return int(obj) if obj % 1 == 0 else float(obj)
+        return super().default(obj)
+
 
 class RoutingService:
     def __init__(self, repository: RoutingRepository, redis_client: redis_lib.Redis):
@@ -28,7 +38,7 @@ class RoutingService:
         # 1. Try Redis cache
         cached = self._redis.get(cache_key)
         if cached:
-            ttl_ms = max((self._redis.pttl(cache_key)), 0)
+            ttl_ms = max(self._redis.pttl(cache_key), 0)
             logger.info("Cache HIT for bankCode=%s", bank_code)
             route = json.loads(cached)
             return self._build_response(route, "CACHE", ttl_ms)
@@ -41,9 +51,14 @@ class RoutingService:
             raise HTTPException(status_code=404,
                                 detail=f"No active route for bankCode: {bank_code}")
 
-        # 3. Repopulate cache
+        # 3. Repopulate cache — DecimalEncoder handles boto3 Decimal types
         try:
-            self._redis.setex(cache_key, settings.cache_ttl_seconds, json.dumps(route))
+            self._redis.setex(
+                cache_key,
+                settings.cache_ttl_seconds,
+                json.dumps(route, cls=DecimalEncoder)   # ← the fix
+            )
+            logger.info("Cache WRITE for bankCode=%s TTL=%ds", bank_code, settings.cache_ttl_seconds)
         except Exception as e:
             logger.warning("Cache write failed for %s: %s", bank_code, e)
 

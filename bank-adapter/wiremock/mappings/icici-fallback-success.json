@@ -1,0 +1,8 @@
+{
+  "request": { "method": "POST", "url": "/mock/icici/txn/fallback" },
+  "response": {
+    "status": 200,
+    "jsonBody": { "iciciBankRef": "ICICI112233", "txnStatus": "SUCCESS" },
+    "headers": { "Content-Type": "application/json" }
+  }
+}
