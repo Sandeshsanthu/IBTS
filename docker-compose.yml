@@ -11,7 +11,7 @@ services:
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=dynamodb
+      - SERVICES=dynamodb,sqs
       - DEBUG=0
       - AWS_DEFAULT_REGION=ap-south-1
     volumes:
@@ -47,7 +47,7 @@ services:
     image: wiremock/wiremock:3.5.4
     container_name: mock-bank-server
     ports:
-      - "8090:8080"                              # 8090 on host, 8080 inside container
+      - "8090:8080"
     volumes:
       - ./bank-adapter/wiremock/mappings:/home/wiremock/mappings:ro
     command: ["--verbose"]
@@ -100,6 +100,7 @@ services:
     ports:
       - "8081:8081"
     environment:
+      - ENV=local
       - PYTHONUNBUFFERED=1
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
@@ -109,7 +110,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CACHE_TTL_SECONDS=300
-      - BANK_ADAPTER_URL=http://bank-adapter:8082/api/v1/adapter/send   # ← wired in
+      - BANK_ADAPTER_URL=http://bank-adapter:8082/api/v1/adapter/send
     depends_on:
       localstack:
         condition: service_healthy
@@ -153,39 +154,78 @@ services:
     networks:
       - ibts-network
 
-  # ── Service 2: payment-switch (after bank-adapter) ────────────────────────
-  # payment-switch:
-  #   build:
-  #     context: ./payment-switch
-  #     dockerfile: Dockerfile
-  #   container_name: payment-switch
-  #   ports:
-  #     - "8083:8083"
-  #   depends_on:
-  #     idempotency-guard:
-  #       condition: service_healthy
-  #     payment-router:
-  #       condition: service_healthy
-  #     bank-adapter:
-  #       condition: service_healthy
-  #   networks:
-  #     - ibts-network
+  # ── Service 2: payment-switch ─────────────────────────────────────────────
 
-  # ── Service 1: api-gateway (last sync service) ────────────────────────────
-  # api-gateway:
-  #   build:
-  #     context: ./api-gateway
-  #     dockerfile: Dockerfile
-  #   container_name: api-gateway
-  #   ports:
-  #     - "8084:8084"
-  #   depends_on:
-  #     payment-switch:
-  #       condition: service_healthy
-  #   networks:
-  #     - ibts-network
+  payment-switch:
+    build:
+      context: ./payment-switch
+      dockerfile: Dockerfile
+    container_name: payment-switch
+    ports:
+      - "8083:8083"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=ap-south-1
+      - DYNAMODB_ENDPOINT_URL=http://localstack:4566
+      - DYNAMODB_TABLE_NAME=ibts-transactions
+      - SQS_ENDPOINT_URL=http://localstack:4566
+      - SQS_QUEUE_NAME=ibts-settlement-events
+      - IDEMPOTENCY_GUARD_URL=http://idempotency-guard:8080
+      - PAYMENT_ROUTER_URL=http://payment-router:8081
+      - BANK_ADAPTER_URL=http://bank-adapter:8082
+    depends_on:
+      idempotency-guard:
+        condition: service_healthy
+      payment-router:
+        condition: service_healthy
+      bank-adapter:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - ibts-network
 
-  # ── Service 6: settlement-engine (async, after payment-switch) ───────────
+  # ── Service 1: api-gateway ────────────────────────────────────────────────
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8084:8084"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PAYMENT_SWITCH_URL=http://payment-switch:8083
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=ibts-dev-secret-change-in-prod
+      - API_KEY=ibts-api-key-dev
+      - RL_PER_IP_REQUESTS=100
+      - RL_PER_VPA_REQUESTS=10
+      - RL_WINDOW_SECONDS=60
+      - ENV=local
+    depends_on:
+      payment-switch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - ibts-network
+
+  # ── Service 6: settlement-engine (NOT YET BUILT) ─────────────────────────
   # settlement-engine:
   #   build:
   #     context: ./settlement-engine
@@ -193,9 +233,29 @@ services:
   #   container_name: settlement-engine
   #   ports:
   #     - "8085:8085"
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
+  #     - AWS_ACCESS_KEY_ID=test
+  #     - AWS_SECRET_ACCESS_KEY=test
+  #     - AWS_DEFAULT_REGION=ap-south-1
+  #     - SQS_ENDPOINT_URL=http://localstack:4566
+  #     - SQS_QUEUE_NAME=ibts-settlement-events
+  #     - DYNAMODB_ENDPOINT_URL=http://localstack:4566
+  #     - SETTLEMENT_LEDGER_TABLE=ibts-settlement-ledger
+  #     - SQS_POLL_WAIT_SECONDS=20
+  #     - SQS_MAX_MESSAGES=10
+  #     - ENV=local
   #   depends_on:
   #     localstack:
   #       condition: service_healthy
+  #     payment-switch:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
+  #     interval: 15s
+  #     timeout: 5s
+  #     retries: 3
+  #   restart: unless-stopped
   #   networks:
   #     - ibts-network
 

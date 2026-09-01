@@ -1,0 +1,9 @@
+PS C:\Users\sandeshs\IBTS\bank-adapter> aws dynamodb list-tables `
+>>   --endpoint-url http://localhost:4566 `
+>>   --region ap-south-1
+{
+    "TableNames": [
+        "IdempotencyRecords",
+        "routing-table"
+    ]
+}

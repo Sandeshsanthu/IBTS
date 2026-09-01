@@ -21,6 +21,16 @@ function Test-Case { param([string]$Id, [string]$Desc)
     Write-Host "`n[$Id] $Desc" -ForegroundColor Cyan
 }
 
+# ── Setup: flush Redis so T02 always gets a clean DB-first load ───
+Write-Host "`n[SETUP] Flushing Redis cache..." -ForegroundColor DarkCyan
+$flushResult = docker exec ibts-redis redis-cli FLUSHALL 2>&1
+if ($flushResult -match "OK") {
+    Write-Host "  [PASS] Redis flushed`n" -ForegroundColor Green
+} else {
+    Write-Host "  [WARN] Redis flush skipped or failed: $flushResult`n" -ForegroundColor Yellow
+}
+# ─────────────────────────────────────────────────────────────────
+
 # T01
 Test-Case "T01" "Health check"
 try {
@@ -141,7 +151,7 @@ try {
     else { Assert-Fail "Expected 13+, got $count" }
 } catch { Assert-Fail "Request failed" $_.Exception.Message }
 
-# ── Summary ────────────────────────────────────────────────────────────────
+# ── Summary ────────────────────────────────────────────────────────
 $total = $pass + $fail
 Write-Host "`n======================================" -ForegroundColor White
 Write-Host " RESULTS: $pass/$total passed" -ForegroundColor $(if ($fail -eq 0){"Green"}else{"Yellow"})
