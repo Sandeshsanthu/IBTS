@@ -1,0 +1,17 @@
+﻿{
+  "name": "yesbank-txn-fallback-success",
+  "request": {
+    "method": "POST",
+    "url": "/mock/yesbank/txn/fallback"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "status":          "SUCCESS",
+      "referenceId":     "YESBNK00FALL001",
+      "responseCode":    "00",
+      "responseMessage": "Transaction successful (fallback)"
+    }
+  }
+}

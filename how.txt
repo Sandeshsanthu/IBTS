@@ -1,0 +1,113 @@
+PS C:\Users\sandeshs\IBTS\payment-switch> Invoke-RestMethod -Uri "http://localhost:8081/api/v1/route/resolve" `
+  -Method POST `
+  -ContentType "application/json" `
+   -Body '{ "vpa": "alice@ibts" }'
+
+
+bankCode         : YESBANK
+bankName         : Yes Bank
+primaryEndpoint  : http://mock-bank-server:8080/mock/yesbank/txn
+fallbackEndpoint : http://mock-bank-server:8080/mock/yesbank/txn/fallback
+resolvedFrom     : DB
+ttlRemainingMs   : 300000
+
+
+
+PS C:\Users\sandeshs\IBTS\payment-switch> Invoke-RestMethod -Uri "http://localhost:8081/api/v1/route/resolve" `
+   -Method POST `
+   -ContentType "application/json" `
+   -Body '{ "vpa": "bob@ibts" }'
+
+
+bankCode         : YESBANK
+bankName         : Yes Bank
+primaryEndpoint  : http://mock-bank-server:8080/mock/yesbank/txn
+fallbackEndpoint : http://mock-bank-server:8080/mock/yesbank/txn/fallback
+resolvedFrom     : CACHE
+ttlRemainingMs   : 243588
+
+
+
+PS C:\Users\sandeshs\IBTS\payment-switch> $response = Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments" `
+   -Method POST `
+   -ContentType "application/json" `
+   -Headers @{ "x-api-key" = "ibts-api-key-dev" } `
+   -Body '{
+     "idempotency_key": "pay-alice-to-bob-100rs-001",
+     "payer_vpa":       "alice@ibts",
+     "payee_vpa":       "bob@ibts",
+     "amount_paise":    10000,
+     "remarks":         "Sending 100 rupees"
+   }'
+PS C:\Users\sandeshs\IBTS\payment-switch>
+PS C:\Users\sandeshs\IBTS\payment-switch> $response
+
+
+txn_id   : 29093dda-45b2-4eb2-9cbf-12ed70cc7876
+status   : SUCCESS
+bank_rrn : YESBNK00TEST001
+message  : SUCCESS
+source   : NEW
+
+
+
+PS C:\Users\sandeshs\IBTS\payment-switch> Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments/$($response.txn_id)" `
+   -Method GET `
+   -Headers @{ "x-api-key" = "ibts-api-key-dev" }
+
+
+txn_id   : 29093dda-45b2-4eb2-9cbf-12ed70cc7876
+status   : SUCCESS
+bank_rrn : YESBNK00TEST001
+message  : SUCCESS
+source   : DB
+
+
+
+PS C:\Users\sandeshs\IBTS\payment-switch> Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments" `
+   -Method POST `
+   -ContentType "application/json" `
+   -Headers @{ "x-api-key" = "ibts-api-key-dev" } `
+   -Body '{
+     "idempotency_key": "pay-alice-to-bob-100rs-001",
+     "payer_vpa":       "alice@ibts",
+     "payee_vpa":       "bob@ibts",
+     "amount_paise":    10000,
+     "remarks":         "Sending 100 rupees"
+   }'
+
+
+txn_id   : 29093dda-45b2-4eb2-9cbf-12ed70cc7876
+status   : SUCCESS
+bank_rrn : YESBNK00TEST001
+message  : SUCCESS
+source   : CACHED
+
+
+
+PS C:\Users\sandeshs\IBTS\payment-switch> try {
+     Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments" `
+       -Method POST `
+      -ContentType "application/json" `
+       -Headers @{ "x-api-key" = "ibts-api-key-dev" } `
+       -Body '{
+         "idempotency_key": "pay-alice-to-bob-100rs-001",
+         "payer_vpa":       "alice@ibts",
+         "payee_vpa":       "bob@ibts",
+         "amount_paise":    10000,
+         "remarks":         "Sending 100 rupees"       }'
+ } catch {
+     Write-Host "HTTP $($_.Exception.Response.StatusCode.Value__)" -ForegroundColor Red
+     Write-Host ($_.ErrorDetails.Message) -ForegroundColor Red
+ }
+
+
+txn_id   : 29093dda-45b2-4eb2-9cbf-12ed70cc7876
+status   : SUCCESS
+bank_rrn : YESBNK00TEST001
+message  : SUCCESS
+source   : CACHED
+
+
+
+PS C:\Users\sandeshs\IBTS\payment-switch> git push and main 

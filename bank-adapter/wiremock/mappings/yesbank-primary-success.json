@@ -1,0 +1,17 @@
+﻿{
+  "name": "yesbank-txn-success",
+  "request": {
+    "method": "POST",
+    "url": "/mock/yesbank/txn"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "status":          "SUCCESS",
+      "referenceId":     "YESBNK00TEST001",
+      "responseCode":    "00",
+      "responseMessage": "Transaction successful"
+    }
+  }
+}

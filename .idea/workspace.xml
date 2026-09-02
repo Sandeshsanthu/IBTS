@@ -2,11 +2,17 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="b8e1a2c4-484b-44c6-a38c-9f6b2489f824" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/bank-adapter/how.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-gateway/tests/rebuild-test.ps1" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/how.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-gateway/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/api-gateway/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-gateway/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/api-gateway/app/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-gateway/tests/test-api-gateway.ps1" beforeDir="false" afterPath="$PROJECT_DIR$/api-gateway/tests/test-api-gateway.ps1" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bank-adapter/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/bank-adapter/Dockerfile" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/payment-router/app/repository/routing_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/payment-router/app/repository/routing_repository.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/payment-router/test-payment-router.ps1" beforeDir="false" afterPath="$PROJECT_DIR$/payment-router/test-payment-router.ps1" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/payment-router/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/payment-router/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/payment-router/app/resolvers/vpa_resolver.py" beforeDir="false" afterPath="$PROJECT_DIR$/payment-router/app/resolvers/vpa_resolver.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/payment-switch/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/payment-switch/Dockerfile" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
