@@ -111,3 +111,187 @@ source   : CACHED
 
 
 PS C:\Users\sandeshs\IBTS\payment-switch> git push and main
+
+
+
+
+PS C:\Users\sandeshs\IBTS> Invoke-RestMethod -Uri "http://localhost:8084/actuator/health"
+
+status service
+------ -------
+UP     api-gateway
+
+
+PS C:\Users\sandeshs\IBTS> Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments" `
+   -Method POST -ContentType "application/json" `
+   -Headers @{ "x-api-key" = "ibts-api-key-dev" } `
+   -Body '{
+     "idempotency_key": "pay-test-001",
+     "payer_vpa":       "alice@ibts",
+     "payee_vpa":       "bob@ibts",
+     "amount_paise":    10000,
+     "remarks":         "First payment"
+   }' | ConvertTo-Json -Depth 5
+{
+    "txn_id":  "87f66ace-6777-4699-89d7-bd24c0cc90a8",
+    "status":  "SUCCESS",
+    "bank_rrn":  "YESBNK00TEST001",
+    "message":  "SUCCESS",
+    "source":  "NEW"
+}
+PS C:\Users\sandeshs\IBTS> # Expected: status=SUCCESS, source=NEW
+PS C:\Users\sandeshs\IBTS>
+PS C:\Users\sandeshs\IBTS> Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments" `
+  -Method POST -ContentType "application/json" `
+  -Headers @{ "x-api-key" = "ibts-api-key-dev" } `
+  -Body '{
+    "idempotency_key": "pay-test-001",
+    "payer_vpa":       "alice@ibts",
+    "payee_vpa":       "bob@ibts",
+     "amount_paise":    10000,
+     "remarks":         "First payment"
+   }' | ConvertTo-Json -Depth 5
+{
+    "txn_id":  "87f66ace-6777-4699-89d7-bd24c0cc90a8",
+    "status":  "SUCCESS",
+    "bank_rrn":  "YESBNK00TEST001",
+    "message":  "SUCCESS",
+    "source":  "CACHED"
+}
+PS C:\Users\sandeshs\IBTS> # Expected: same txn_id, source=CACHED  ✅ idempotency working
+PS C:\Users\sandeshs\IBTS> $txnId = "paste-txn_id-from-step-2-here"
+PS C:\Users\sandeshs\IBTS> Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments/$txnId" `
+   -Method GET `
+   -Headers @{ "x-api-key" = "ibts-api-key-dev" } `
+   | ConvertTo-Json -Depth 5
+Invoke-RestMethod : {"detail":"Transaction paste-txn_id-from-step-2-here not found"}
+At line:1 char:1
++ Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments/$txnId" ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (System.Net.HttpWebRequest:HttpWebRequest) [Invoke-RestMethod], WebExc
+   eption
+    + FullyQualifiedErrorId : WebCmdletWebResponseException,Microsoft.PowerShell.Commands.InvokeRestMethodCommand
+PS C:\Users\sandeshs\IBTS> # Expected: source=DB
+PS C:\Users\sandeshs\IBTS> # Fire 12 rapid requests — should get 429 after the 10th (RL_PER_IP_REQUESTS=10)
+PS C:\Users\sandeshs\IBTS> 1..12 | ForEach-Object {
+     try {
+         $r = Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments" `
+          -Method POST -ContentType "application/json" `
+          -Headers @{ "x-api-key" = "ibts-api-key-dev" } `
+           -Body "{`"idempotency_key`": `"rl-test-$_`", `"payer_vpa`": `"alice@ibts`", `"payee_vpa`": `"bob@ibts`", `"amount_paise`": 100, `"remarks`": `"rl test`"}"
+         Write-Host "Request $_ → SUCCESS ($($r.status))" -ForegroundColor Green
+     } catch {
+         Write-Host "Request $_ → $($_.Exception.Response.StatusCode.Value__) RATE LIMITED" -ForegroundColor Red
+     }
+ }
+Request 1 → SUCCESS (SUCCESS)
+Request 2 → SUCCESS (SUCCESS)
+Request 3 → SUCCESS (SUCCESS)
+Request 4 → SUCCESS (SUCCESS)
+Request 5 → SUCCESS (SUCCESS)
+Request 6 → SUCCESS (SUCCESS)
+Request 7 → SUCCESS (SUCCESS)
+Request {"detail":"IP rate limit exceeded"} → 429 RATE LIMITED
+Request {"detail":"IP rate limit exceeded"} → 429 RATE LIMITED
+Request {"detail":"IP rate limit exceeded"} → 429 RATE LIMITED
+Request {"detail":"IP rate limit exceeded"} → 429 RATE LIMITED
+Request {"detail":"IP rate limit exceeded"} → 429 RATE LIMITED
+PS C:\Users\sandeshs\IBTS>
+PS C:\Users\sandeshs\IBTS>
+PS C:\Users\sandeshs\IBTS> Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments/87f66ace-6777-4699-89d7-bd24c0cc90a8" `
+>>   -Method GET `
+>>   -Headers @{ "x-api-key" = "ibts-api-key-dev" } `
+>>   | ConvertTo-Json -Depth 5
+Invoke-RestMethod : {"detail":"IP rate limit exceeded"}
+At line:1 char:1
++ Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments/87f66ac ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (System.Net.HttpWebRequest:HttpWebRequest) [Invoke-RestMethod], WebExc
+   eption
+    + FullyQualifiedErrorId : WebCmdletWebResponseException,Microsoft.PowerShell.Commands.InvokeRestMethodCommand
+PS C:\Users\sandeshs\IBTS>
+
+Write-Host "--- TEST 1: Invalid API Key ---" -ForegroundColor Cyan
+try {
+    Invoke-RestMethod -Uri "$base/api/v1/payments" -Method POST `
+      -ContentType "application/json" `
+      -Headers @{ "x-api-key" = "wrong-key" } `
+      -Body '{"idempotency_key":"sec-001","payer_vpa":"alice@ibts","payee_vpa":"bob@ibts","amount_paise":100,"remarks":"sec test"}'
+    Write-Host "⚠️  PASSED WITHOUT AUTH — SECURITY BUG" -ForegroundColor Red
+} catch {
+    Write-Host "🔒 Blocked: HTTP $($_.Exception.Response.StatusCode.Value__)" -ForegroundColor Green
+}
+
+
+# ── TEST 2: No API key at all → expect 401 ───────────────────────────────────
+Write-Host "`n--- TEST 2: Missing API Key ---" -ForegroundColor Cyan
+try {
+    Invoke-RestMethod -Uri "$base/api/v1/payments" -Method POST `
+      -ContentType "application/json" `
+      -Body '{"idempotency_key":"sec-002","payer_vpa":"alice@ibts","payee_vpa":"bob@ibts","amount_paise":100,"remarks":"sec test"}'
+    Write-Host "⚠️  PASSED WITHOUT AUTH — SECURITY BUG" -ForegroundColor Red
+} catch {
+    Write-Host "🔒 Blocked: HTTP $($_.Exception.Response.StatusCode.Value__)" -ForegroundColor Green
+}
+
+
+Write-Host "`n--- TEST 3: Missing payer_vpa ---" -ForegroundColor Cyan
+try {
+    Invoke-RestMethod -Uri "$base/api/v1/payments" -Method POST `
+      -ContentType "application/json" -Headers $headers `
+      -Body '{"idempotency_key":"val-001","payee_vpa":"bob@ibts","amount_paise":100,"remarks":"val test"}'
+    Write-Host "⚠️  Accepted invalid payload" -ForegroundColor Red
+} catch {
+    Write-Host "✅ Rejected: HTTP $($_.Exception.Response.StatusCode.Value__)" -ForegroundColor Green
+    Write-Host "   $($_.ErrorDetails.Message)" -ForegroundColor Gray
+}
+
+
+
+Write-Host "`n--- TEST 4: Negative amount ---" -ForegroundColor Cyan
+try {
+    Invoke-RestMethod -Uri "$base/api/v1/payments" -Method POST `
+      -ContentType "application/json" -Headers $headers `
+      -Body '{"idempotency_key":"val-002","payer_vpa":"alice@ibts","payee_vpa":"bob@ibts","amount_paise":-500,"remarks":"neg test"}'
+    Write-Host "⚠️  Accepted negative amount — FINANCIAL BUG" -ForegroundColor Red
+} catch {
+    Write-Host "✅ Rejected: HTTP $($_.Exception.Response.StatusCode.Value__)" -ForegroundColor Green
+    Write-Host "   $($_.ErrorDetails.Message)" -ForegroundColor Gray
+}
+
+
+# ── TEST 5: Unknown VPA → should fail gracefully ─────────────────────────────
+Write-Host "`n--- TEST 5: Unknown VPA ---" -ForegroundColor Cyan
+try {
+    $r = Invoke-RestMethod -Uri "$base/api/v1/payments" -Method POST `
+      -ContentType "application/json" -Headers $headers `
+      -Body '{"idempotency_key":"val-003","payer_vpa":"ghost@ibts","payee_vpa":"bob@ibts","amount_paise":100,"remarks":"unknown vpa"}'
+    Write-Host "Response: $($r | ConvertTo-Json)" -ForegroundColor Yellow
+} catch {
+    Write-Host "✅ Handled: HTTP $($_.Exception.Response.StatusCode.Value__)" -ForegroundColor Green
+    Write-Host "   $($_.ErrorDetails.Message)" -ForegroundColor Gray
+}
+
+
+# Step 2 — Fire a payment — should hit fallback or return error gracefully
+# Step 1 — Stop the mock bank so adapter has no target
+docker stop mock-bank-server
+Write-Host "Mock bank stopped" -ForegroundColor Yellow
+
+# Step 2 — Fire a payment — should hit fallback or return error gracefully
+Start-Sleep -Seconds 2
+try {
+    $r = Invoke-RestMethod -Uri "http://localhost:8084/api/v1/payments" -Method POST `
+      -ContentType "application/json" `
+      -Headers @{ "x-api-key" = "ibts-api-key-dev" } `
+      -Body '{"idempotency_key":"cb-test-001","payer_vpa":"alice@ibts","payee_vpa":"bob@ibts","amount_paise":500,"remarks":"circuit breaker test"}'
+    Write-Host "Response: $($r.status) — source: $($r.source)" -ForegroundColor Yellow
+    # If FAILED gracefully = good. If SUCCESS = fallback worked. If exception = check message.
+} catch {
+    Write-Host "Error: $($_.ErrorDetails.Message)" -ForegroundColor Red
+}
+
+# Step 3 — Restart bank
+docker start mock-bank-server
+Write-Host "Mock bank restarted" -ForegroundColor Green
+

@@ -3,12 +3,11 @@
 
 services:
 
-
   localstack:
     image: localstack/localstack:3.4
     container_name: localstack
     ports:
-      - "4566:4566"
+      - "4566:4566"        # ✅ Keep — needed for AWS CLI debugging from host
     environment:
       - SERVICES=dynamodb,sqs
       - DEBUG=0
@@ -27,8 +26,8 @@ services:
   redis:
     image: redis:7.2-alpine
     container_name: ibts-redis
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"             # ✅ Internal only — gateway talks to it via Docker DNS
     volumes:
       - redis_data:/data
     healthcheck:
@@ -40,12 +39,11 @@ services:
     networks:
       - ibts-network
 
-
   mock-bank-server:
     image: wiremock/wiremock:3.5.4
     container_name: mock-bank-server
-    ports:
-      - "8090:8080"
+    expose:
+      - "8080"             # ✅ Internal only — bank-adapter calls it via Docker DNS
     volumes:
       - ./bank-adapter/wiremock/mappings:/home/wiremock/mappings:ro
     command: ["--verbose"]
@@ -59,15 +57,13 @@ services:
     networks:
       - ibts-network
 
-  # â”€â”€ Service 3: idempotency-guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
   idempotency-guard:
     build:
       context: ./idempotency-guard
       dockerfile: Dockerfile
     container_name: idempotency-guard
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"             # ✅ Internal only — payment-switch calls it
     environment:
       - PYTHONUNBUFFERED=1
       - AWS_ACCESS_KEY_ID=test
@@ -88,15 +84,38 @@ services:
     networks:
       - ibts-network
 
-  # â”€â”€ Service 4: payment-router â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  bank-adapter:
+    build:
+      context: ./bank-adapter
+      dockerfile: Dockerfile
+    container_name: bank-adapter
+    expose:
+      - "8082"             # ✅ Internal only — payment-router calls it
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PRIMARY_TIMEOUT_SECONDS=3.0
+      - FALLBACK_TIMEOUT_SECONDS=5.0
+      - BREAKER_FAIL_MAX=3
+      - BREAKER_RESET_TIMEOUT=30
+    depends_on:
+      mock-bank-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - ibts-network
 
   payment-router:
     build:
       context: ./payment-router
       dockerfile: Dockerfile
     container_name: payment-router
-    ports:
-      - "8081:8081"
+    expose:
+      - "8081"             # ✅ Internal only — payment-switch calls it
     environment:
       - ENV=local
       - PYTHONUNBUFFERED=1
@@ -125,41 +144,13 @@ services:
     networks:
       - ibts-network
 
-
-  bank-adapter:
-    build:
-      context: ./bank-adapter
-      dockerfile: Dockerfile
-    container_name: bank-adapter
-    ports:
-      - "8082:8082"
-    environment:
-      - PYTHONUNBUFFERED=1
-      - PRIMARY_TIMEOUT_SECONDS=3.0
-      - FALLBACK_TIMEOUT_SECONDS=5.0
-      - BREAKER_FAIL_MAX=3
-      - BREAKER_RESET_TIMEOUT=30
-    depends_on:
-      mock-bank-server:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
-    networks:
-      - ibts-network
-
-  # â”€â”€ Service 2: payment-switch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
   payment-switch:
     build:
       context: ./payment-switch
       dockerfile: Dockerfile
     container_name: payment-switch
-    ports:
-      - "8083:8083"
+    expose:
+      - "8083"             # ✅ Internal only — api-gateway calls it
     environment:
       - PYTHONUNBUFFERED=1
       - AWS_ACCESS_KEY_ID=test
@@ -188,15 +179,13 @@ services:
     networks:
       - ibts-network
 
-  # â”€â”€ Service 1: api-gateway â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
   api-gateway:
     build:
       context: ./api-gateway
       dockerfile: Dockerfile
     container_name: api-gateway
     ports:
-      - "8084:8084"
+      - "8084:8084"        # ✅ THE ONLY PUBLIC PORT — everything flows through here
     environment:
       - PYTHONUNBUFFERED=1
       - PAYMENT_SWITCH_URL=http://payment-switch:8083
@@ -222,7 +211,6 @@ services:
     networks:
       - ibts-network
 
-
 volumes:
   localstack_data:
   redis_data:
@@ -231,4 +219,3 @@ networks:
   ibts-network:
     driver: bridge
     name: ibts-network
-
