@@ -7,7 +7,7 @@ services:
     image: localstack/localstack:3.4
     container_name: localstack
     ports:
-      - "4566:4566"        # ✅ Keep — needed for AWS CLI debugging from host
+      - "4566:4566"
     environment:
       - SERVICES=dynamodb,sqs
       - DEBUG=0
@@ -27,7 +27,7 @@ services:
     image: redis:7.2-alpine
     container_name: ibts-redis
     expose:
-      - "6379"             # ✅ Internal only — gateway talks to it via Docker DNS
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -43,7 +43,7 @@ services:
     image: wiremock/wiremock:3.5.4
     container_name: mock-bank-server
     expose:
-      - "8080"             # ✅ Internal only — bank-adapter calls it via Docker DNS
+      - "8080"
     volumes:
       - ./bank-adapter/wiremock/mappings:/home/wiremock/mappings:ro
     command: ["--verbose"]
@@ -63,7 +63,7 @@ services:
       dockerfile: Dockerfile
     container_name: idempotency-guard
     expose:
-      - "8080"             # ✅ Internal only — payment-switch calls it
+      - "8080"
     environment:
       - PYTHONUNBUFFERED=1
       - AWS_ACCESS_KEY_ID=test
@@ -90,7 +90,7 @@ services:
       dockerfile: Dockerfile
     container_name: bank-adapter
     expose:
-      - "8082"             # ✅ Internal only — payment-router calls it
+      - "8082"
     environment:
       - PYTHONUNBUFFERED=1
       - PRIMARY_TIMEOUT_SECONDS=3.0
@@ -115,7 +115,7 @@ services:
       dockerfile: Dockerfile
     container_name: payment-router
     expose:
-      - "8081"             # ✅ Internal only — payment-switch calls it
+      - "8081"
     environment:
       - ENV=local
       - PYTHONUNBUFFERED=1
@@ -146,11 +146,11 @@ services:
 
   payment-switch:
     build:
-      context: ./payment-switch
-      dockerfile: Dockerfile
+      context: .                              # ← CHANGED: was ./payment-switch
+      dockerfile: payment-switch/Dockerfile  # ← CHANGED: explicit path since context is now root
     container_name: payment-switch
     expose:
-      - "8083"             # ✅ Internal only — api-gateway calls it
+      - "8083"
     environment:
       - PYTHONUNBUFFERED=1
       - AWS_ACCESS_KEY_ID=test
@@ -185,7 +185,7 @@ services:
       dockerfile: Dockerfile
     container_name: api-gateway
     ports:
-      - "8084:8084"        # ✅ THE ONLY PUBLIC PORT — everything flows through here
+      - "8084:8084"
     environment:
       - PYTHONUNBUFFERED=1
       - PAYMENT_SWITCH_URL=http://payment-switch:8083

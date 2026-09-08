@@ -2,11 +2,38 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="b8e1a2c4-484b-44c6-a38c-9f6b2489f824" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/api-gateway/tests/all.ps1" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-gateway/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-gateway/app/middleware/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-gateway/app/middleware/auth_metrics.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/api-gateway/app/middleware/rate_limit_metrics.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/bank-adapter/app/bank_call_metrics.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/bank-adapter/app/breaker_metrics.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/idempotency-guard/app/idem_metrics.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/metrics/grafana/provisioning/dashboards/ibts_overview.json" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/metrics/grafana/provisioning/datasources/dashboards.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/metrics/grafana/provisioning/datasources/prometheus.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/payment-router/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/payment-router/app/router_metrics.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/payment-switch/app/init_resources.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/payment-switch/app/payment_metrics.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bank-adapter/app/circuit_breaker/breaker_registry.py" beforeDir="false" afterPath="$PROJECT_DIR$/bank-adapter/app/circuit_breaker/breaker_registry.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-gateway/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/api-gateway/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-gateway/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/api-gateway/app/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/api-gateway/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/api-gateway/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bank-adapter/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/bank-adapter/Dockerfile" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bank-adapter/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/bank-adapter/app/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bank-adapter/app/services/adapter_service.py" beforeDir="false" afterPath="$PROJECT_DIR$/bank-adapter/app/services/adapter_service.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bank-adapter/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/bank-adapter/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/idempotency-guard/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/idempotency-guard/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/idempotency-guard/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/idempotency-guard/app/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/idempotency-guard/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/idempotency-guard/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/payment-router/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/payment-router/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/payment-router/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/payment-router/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/payment-router/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/payment-router/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/payment-switch/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/payment-switch/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/payment-switch/init_resources.py" beforeDir="false" afterPath="$PROJECT_DIR$/payment-switch/init_resources.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/payment-switch/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/payment-switch/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/payment-switch/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/payment-switch/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -47,6 +74,9 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\sandeshs\IBTS\payment-router\app" />
+      <recent name="C:\Users\sandeshs\IBTS\api-gateway\app" />
+      <recent name="C:\Users\sandeshs\IBTS\shared\metrics" />
       <recent name="C:\Users\sandeshs\IBTS\bank-adapter\app\services" />
     </key>
   </component>

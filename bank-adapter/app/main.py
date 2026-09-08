@@ -3,6 +3,8 @@
 
 import structlog
 from fastapi import FastAPI
+from prometheus_client import make_asgi_app
+from starlette.routing import Mount
 from app.routers.adapter_router import router
 from app.routers.debug_router   import router as debug_router
 
@@ -13,7 +15,11 @@ structlog.configure(
     ]
 )
 
-app = FastAPI(title="bank-adapter", version="1.0.0")
+app = FastAPI(
+    title="bank-adapter",
+    version="1.0.0",
+    routes=[Mount("/metrics", make_asgi_app())],  # ← Prometheus scrape endpoint
+)
 app.include_router(router)
 app.include_router(debug_router)
 

@@ -7,6 +7,7 @@ from app.config import settings
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+
 def create_table(ddb):
     try:
         ddb.create_table(
@@ -15,9 +16,18 @@ def create_table(ddb):
             AttributeDefinitions=[{"AttributeName": "txn_id", "AttributeType": "S"}],
             BillingMode="PAY_PER_REQUEST",
         )
-        log.info("Table '%s' created", settings.dynamodb_table_name)
+        log.info("Table '%s' created — waiting for ACTIVE", settings.dynamodb_table_name)
     except ddb.meta.client.exceptions.ResourceInUseException:
-        log.info("Table '%s' already exists", settings.dynamodb_table_name)
+        log.info("Table '%s' already exists — waiting for ACTIVE", settings.dynamodb_table_name)
+
+    # ← NEW: wait until table is fully ACTIVE before returning
+    waiter = ddb.meta.client.get_waiter("table_exists")
+    waiter.wait(
+        TableName=settings.dynamodb_table_name,
+        WaiterConfig={"Delay": 2, "MaxAttempts": 15},   # 30s max
+    )
+    log.info("Table '%s' is ACTIVE", settings.dynamodb_table_name)
+
 
 def create_queue(sqs):
     try:
@@ -25,6 +35,7 @@ def create_queue(sqs):
         log.info("SQS queue '%s' created", settings.sqs_queue_name)
     except Exception as exc:
         log.warning("SQS queue creation skipped: %s", exc)
+
 
 def main():
     for attempt in range(10):
@@ -45,11 +56,15 @@ def main():
             )
             create_table(ddb)
             create_queue(sqs)
-            log.info("Resources ready"); sys.exit(0)
+            log.info("Resources ready")
+            sys.exit(0)
         except Exception as exc:
             log.warning("Attempt %d failed: %s", attempt + 1, exc)
             time.sleep(5)
-    log.error("Resource init failed"); sys.exit(1)
+
+    log.error("Resource init failed")
+    sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
