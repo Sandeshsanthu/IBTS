@@ -1,0 +1,48 @@
+#metric/otel/otel-collector.yml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+  resource:
+    attributes:
+      - key: environment
+        value: dev
+        action: insert
+      - key: project
+        value: ibts
+        action: insert
+
+exporters:
+  otlp/jaeger:
+    endpoint: ibts-jaeger:4317
+    tls:
+      insecure: true
+  prometheus:
+    endpoint: '0.0.0.0:8888'
+  debug:
+    verbosity: normal
+
+service:
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8889
+  pipelines:
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters:  [otlp/jaeger, debug]
+    metrics:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters:  [prometheus, debug]

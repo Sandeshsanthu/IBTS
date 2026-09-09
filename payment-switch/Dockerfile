@@ -1,10 +1,7 @@
-﻿FROM python:3.11-slim
+FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
-
-# ── 0. Upgrade pip + setuptools ───────────────────────────────────────────────
-RUN pip install --upgrade pip setuptools wheel
 
 # ── 1. Install shared package (resolves transitive deps) ─────────────────────
 COPY shared/ /tmp/shared/
@@ -29,4 +26,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8083
 
-CMD ["sh", "-c", "python init_resources.py && uvicorn main:app --host 0.0.0.0 --port 8083"]
+CMD ["sh", "-c", "python init_resources.py && opentelemetry-instrument uvicorn main:app --host 0.0.0.0 --port 8083"]

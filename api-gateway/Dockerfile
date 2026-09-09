@@ -8,14 +8,11 @@ RUN apt-get update \
 
 WORKDIR /service
 
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
+COPY shared/ ./shared/
 
 EXPOSE 8084
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8084"]
-
-# -- Make shared importable as "shared.*" namespace
-COPY shared/ ./shared/
+CMD ["opentelemetry-instrument", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8084"]

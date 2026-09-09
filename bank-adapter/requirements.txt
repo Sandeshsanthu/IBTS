@@ -7,3 +7,13 @@ structlog==24.1.0
 prometheus-client==0.20.0
 redis[asyncio]==5.0.3
 
+
+# -- OpenTelemetry (auto-instrumentation) --------------------------------------
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-exporter-otlp-proto-grpc==1.27.0
+opentelemetry-instrumentation==0.48b0
+opentelemetry-instrumentation-fastapi==0.48b0
+opentelemetry-instrumentation-httpx==0.48b0
+opentelemetry-instrumentation-requests==0.48b0
+opentelemetry-instrumentation-logging==0.48b0

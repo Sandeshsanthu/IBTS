@@ -3,6 +3,10 @@
 
 services:
 
+  # ─────────────────────────────────────────────
+  # EXISTING: Metrics
+  # ─────────────────────────────────────────────
+
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: ibts-prometheus
@@ -26,11 +30,11 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_USER:                  admin
-      GF_SECURITY_ADMIN_PASSWORD:              ibts-grafana-dev
+      GF_SECURITY_ADMIN_USER:                    admin
+      GF_SECURITY_ADMIN_PASSWORD:                ibts-grafana-dev
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/ibts_overview.json
-      GF_ALERTING_ENABLED:                     "false"
-      GF_UNIFIED_ALERTING_ENABLED:             "false"
+      GF_ALERTING_ENABLED:                       "false"
+      GF_UNIFIED_ALERTING_ENABLED:               "false"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -38,6 +42,7 @@ services:
       - ibts-network
     depends_on:
       - prometheus
+      - jaeger
     restart: unless-stopped
 
   alertmanager:
@@ -67,10 +72,108 @@ services:
       - ibts-network
     restart: unless-stopped
 
+  # ─────────────────────────────────────────────
+  # NEW: Logs Pipeline
+  # ─────────────────────────────────────────────
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: ibts-elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.ml.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - ELASTIC_PASSWORD=ibts-es-dev
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - ibts-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: ibts-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      SERVER_NAME: ibts-kibana
+    networks:
+      - ibts-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  fluent-bit:
+    image: fluent/fluent-bit:3.1
+    container_name: ibts-fluent-bit
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+    networks:
+      - ibts-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # NEW: Traces Pipeline
+  # ─────────────────────────────────────────────
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.101.0
+    container_name: ibts-otel-collector
+    ports:
+      - "4317:4317"    # gRPC  — apps send traces here
+      - "4318:4318"    # HTTP  — apps send traces here
+      - "8889:8889"    # Prometheus metrics exposed by collector itself
+    volumes:
+      - ./otel/otel-collector.yml:/etc/otel/config.yml:ro
+    command: ["--config=/etc/otel/config.yml"]
+    networks:
+      - ibts-network
+    depends_on:
+      - jaeger
+      - elasticsearch
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: ibts-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # gRPC from OTEL collector
+      - "14268:14268"  # HTTP Thrift (legacy)
+    environment:
+      SPAN_STORAGE_TYPE: elasticsearch
+      ES_SERVER_URLS: http://elasticsearch:9200
+      ES_TAGS_AS_FIELDS_ALL: "true"
+      LOG_LEVEL: info
+    networks:
+      - ibts-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+# ─────────────────────────────────────────────
 volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+  elasticsearch_data:
 
 networks:
   ibts-network:

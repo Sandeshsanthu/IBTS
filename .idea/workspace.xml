@@ -2,37 +2,25 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="b8e1a2c4-484b-44c6-a38c-9f6b2489f824" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/api-gateway/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-gateway/app/middleware/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-gateway/app/middleware/auth_metrics.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/api-gateway/app/middleware/rate_limit_metrics.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bank-adapter/app/bank_call_metrics.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bank-adapter/app/breaker_metrics.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/idempotency-guard/app/idem_metrics.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/metrics/grafana/provisioning/dashboards/ibts_overview.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/metrics/grafana/provisioning/datasources/dashboards.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/metrics/grafana/provisioning/datasources/prometheus.yml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/payment-router/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/payment-router/app/router_metrics.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/payment-switch/app/init_resources.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/payment-switch/app/payment_metrics.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/metrics/fluent-bit/fluent-bit.conf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/metrics/fluent-bit/parsers.conf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/metrics/grafana/provisioning/datasources/jaeger.yml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/metrics/otel/otel-collector.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api-gateway/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/api-gateway/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/api-gateway/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/api-gateway/app/main.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/api-gateway/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/api-gateway/requirements.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bank-adapter/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/bank-adapter/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bank-adapter/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/bank-adapter/app/main.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/bank-adapter/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/bank-adapter/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/idempotency-guard/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/idempotency-guard/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/idempotency-guard/app/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/idempotency-guard/app/main.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/idempotency-guard/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/idempotency-guard/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/metrics/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/metrics/docker-compose.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/metrics/grafana/provisioning/dashboards/ibts_overview.json" beforeDir="false" afterPath="$PROJECT_DIR$/metrics/grafana/provisioning/dashboards/ibts_overview.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/metrics/grafana/provisioning/datasources/dashboards.yml" beforeDir="false" afterPath="$PROJECT_DIR$/metrics/grafana/provisioning/dashboards/dashboards.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/metrics/grafana/provisioning/datasources/prometheus.yml" beforeDir="false" afterPath="$PROJECT_DIR$/metrics/grafana/provisioning/datasources/prometheus.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/metrics/prometheus/prometheus.yml" beforeDir="false" afterPath="$PROJECT_DIR$/metrics/prometheus/prometheus.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/payment-router/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/payment-router/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/payment-router/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/payment-router/main.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/payment-router/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/payment-router/requirements.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/payment-switch/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/payment-switch/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/payment-switch/init_resources.py" beforeDir="false" afterPath="$PROJECT_DIR$/payment-switch/init_resources.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/payment-switch/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/payment-switch/main.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/payment-switch/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/payment-switch/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -74,6 +62,7 @@
 }</component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\sandeshs\IBTS\metrics\grafana\provisioning\dashboards" />
       <recent name="C:\Users\sandeshs\IBTS\payment-router\app" />
       <recent name="C:\Users\sandeshs\IBTS\api-gateway\app" />
       <recent name="C:\Users\sandeshs\IBTS\shared\metrics" />

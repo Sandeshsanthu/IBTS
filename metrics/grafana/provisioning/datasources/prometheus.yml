@@ -11,9 +11,9 @@ datasources:
     isDefault: true
     editable:  false
     jsonData:
-      timeInterval:          "15s"
-      queryTimeout:          "60s"
-      httpMethod:            POST
+      timeInterval: "15s"
+      queryTimeout: "60s"
+      httpMethod:   POST
       exemplarTraceIdDestinations:
-        - name: trace_id
-          datasourceUid: tempo   # wire up Tempo here when you add tracing
+        - name:           trace_id
+          datasourceUid:  jaeger    # ← was 'tempo', updated to match our Jaeger uid
