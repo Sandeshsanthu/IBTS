@@ -16,14 +16,14 @@ class PaymentRequest(BaseModel):
     idempotency_key: str        = Field(..., min_length=8, max_length=64)
     payer_vpa: str              = Field(..., pattern=r"^[\w.\-]+@[\w]+$")
     payee_vpa: str              = Field(..., pattern=r"^[\w.\-]+@[\w]+$")
-    amount_paise: int           = Field(..., gt=0, description="Amount in paise. ₹1 = 100")
+    amount_paise: int           = Field(..., gt=0, description="Amount in paise. â‚¹1 = 100")
     remarks: Optional[str]      = Field(None, max_length=128)
 
     @field_validator("amount_paise")
     @classmethod
     def max_limit(cls, v):
-        if v > 100_000_00:  # ₹1,00,000 UPI limit
-            raise ValueError("Exceeds UPI limit of ₹1,00,000")
+        if v > 100_000_00:  # â‚¹1,00,000 UPI limit
+            raise ValueError("Exceeds UPI limit of â‚¹1,00,000")
         return v
 
 class PaymentResponse(BaseModel):
@@ -46,3 +46,4 @@ class TxnRecord(BaseModel):
     error: Optional[str]      = None
     created_at: str           = ""
     updated_at: str           = ""
+

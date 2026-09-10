@@ -2,12 +2,12 @@
 # filename: shared/delete/registry.py
 """
 Single source of truth for every Prometheus metric in IBTS.
-All five Python services import from here — no metric is defined twice.
+All five Python services import from here â€” no metric is defined twice.
 """
 
 from prometheus_client import Counter, Histogram, Gauge
 
-# ── Label name constants ───────────────────────────────────────────────────────
+# â”€â”€ Label name constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 L_SERVICE     = "service"        # api-gateway|payment-switch|payment-router|bank-adapter|idempotency
 L_ENDPOINT    = "endpoint"       # route template  e.g. /api/v1/payments
 L_METHOD      = "method"         # GET|POST
@@ -78,7 +78,7 @@ RATE_LIMIT_REMAINING = Gauge(
 PAYMENT_INITIATED_TOTAL = Counter(
     "ibts_payment_initiated_total",
     "Payments initiated by final status and both bank codes. "
-    "Core volume metric — alert on drop > 20 %.",
+    "Core volume metric â€” alert on drop > 20 %.",
     [L_PAYER_BANK, L_PAYEE_BANK, L_STATUS, L_IDEM],
 )
 
@@ -101,7 +101,7 @@ PAYMENT_TOTAL_AMOUNT_PAISE = Counter(
 
 PAYMENT_E2E_LATENCY_SECONDS = Histogram(
     "ibts_payment_end_to_end_latency_seconds",
-    "Full payment lifecycle: gateway receipt → final response. "
+    "Full payment lifecycle: gateway receipt â†’ final response. "
     "SLA: p95 < 3 s, p99 < 5 s.",
     [L_PAYEE_BANK, L_STATUS],
     buckets=(0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0, 30.0),
@@ -132,7 +132,7 @@ IDEMPOTENCY_DYNAMO_LATENCY_SECONDS = Histogram(
 
 IDEMPOTENCY_STALE_PROCESSING_TOTAL = Counter(
     "ibts_idempotency_stale_processing_total",
-    "Keys found in PROCESSING state — indicates crashed transaction. "
+    "Keys found in PROCESSING state â€” indicates crashed transaction. "
     "Alert if > 1 % of total checks.",
     [L_SERVICE],
 )
@@ -252,7 +252,7 @@ REDIS_OP_LATENCY_SECONDS = Histogram(
 
 REDIS_ERRORS_TOTAL = Counter(
     "ibts_redis_errors_total",
-    "Redis operation failures. Alert immediately — cascades to DB storm.",
+    "Redis operation failures. Alert immediately â€” cascades to DB storm.",
     [L_SERVICE, "error_type"],
 )
 
@@ -268,3 +268,4 @@ DYNAMO_ERRORS_TOTAL = Counter(
     "DynamoDB failures by service, table and AWS error code.",
     [L_SERVICE, L_TABLE, "error_type"],
 )
+

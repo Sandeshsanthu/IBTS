@@ -8,7 +8,7 @@ import time
 import httpx
 import pybreaker
 
-from shared.metrics.registry import (
+from metrics.registry import (
     BANK_REQUESTS_TOTAL,
     BANK_REQUEST_LATENCY_SECONDS,
     BANK_FAILURES_TOTAL,
@@ -24,7 +24,7 @@ async def _call_endpoint(
     payload:       dict,
     timeout:       float,
 ) -> dict:
-    """Raw HTTP call — no breaker. Records request metrics."""
+    """Raw HTTP call â€” no breaker. Records request metrics."""
     start = time.perf_counter()
     code  = "error"
     try:
@@ -93,3 +93,4 @@ async def call_bank(
                 bank_code=bank_code, failure_type="both_failed"
             ).inc()
             raise
+

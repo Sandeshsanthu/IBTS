@@ -21,19 +21,19 @@ class AdapterService:
         payload     = transformer.to_bank_payload(req)
         start_ms    = int(time.time() * 1000)
 
-        # ── NO manual open guard here ──────────────────────────────────────
+        # â”€â”€ NO manual open guard here â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         # pybreaker handles open / half-open / closed entirely inside
         # breaker.call() in _post().
         #
-        # open + within timeout  → breaker.call() raises CircuitBreakerError
-        # open + timeout expired → breaker.call() transitions to half_open,
+        # open + within timeout  â†’ breaker.call() raises CircuitBreakerError
+        # open + timeout expired â†’ breaker.call() transitions to half_open,
         #                          allows the probe through
-        # half_open + success    → breaker closes automatically
-        # half_open + failure    → breaker re-opens, new timeout starts
+        # half_open + success    â†’ breaker closes automatically
+        # half_open + failure    â†’ breaker re-opens, new timeout starts
 
         attempts = 0
 
-        # ── PRIMARY ────────────────────────────────────────────────────────
+        # â”€â”€ PRIMARY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
             attempts += 1
             raw = await self._post(req.primaryEndpoint, payload,
@@ -69,7 +69,7 @@ class AdapterService:
                                     "CLIENT_ERROR",
                                     str(primary_err))
 
-        # ── FALLBACK ───────────────────────────────────────────────────────
+        # â”€â”€ FALLBACK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         try:
             attempts += 1
             raw = await self._post(req.fallbackEndpoint, payload,
@@ -102,7 +102,7 @@ class AdapterService:
                                 "BANK_UNREACHABLE",
                                 "Both primary and fallback failed")
 
-    # ── Helpers ───────────────────────────────────────────────────────────
+    # â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _post(self, url: str, payload: dict,
                     timeout: float,

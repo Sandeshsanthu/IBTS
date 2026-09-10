@@ -5,7 +5,7 @@ from app.transformers.base_transformer import BaseTransformer
 from app.models import AdapterRequest
 
 class DefaultTransformer(BaseTransformer):
-    """Fallback — used for banks without a custom transformer."""
+    """Fallback â€” used for banks without a custom transformer."""
     def to_bank_payload(self, req: AdapterRequest) -> dict:
         return {
             "transactionId": req.transactionId,
@@ -21,3 +21,4 @@ class DefaultTransformer(BaseTransformer):
             "bankReferenceId": raw.get("referenceId") or raw.get("refId"),
             "status":          "SUCCESS" if raw.get("status") == "SUCCESS" else "FAILED",
         }
+

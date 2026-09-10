@@ -22,7 +22,8 @@ PREFIX_MAP: dict[str, str] = {
 }
 
 def resolve_ifsc(ifsc: str) -> Optional[str]:
-    """'SBIN0001234' → 'SBI'"""
+    """'SBIN0001234' â†’ 'SBI'"""
     if not ifsc or len(ifsc) < 4:
         return None
     return PREFIX_MAP.get(ifsc[:4].upper())
+

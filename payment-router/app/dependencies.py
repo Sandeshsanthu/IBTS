@@ -21,3 +21,4 @@ def get_redis_client() -> redis.Redis:
 
 def get_routing_service() -> RoutingService:
     return RoutingService(get_repository(), get_redis_client())
+

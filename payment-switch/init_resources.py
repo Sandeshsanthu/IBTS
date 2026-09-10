@@ -16,11 +16,11 @@ def create_table(ddb):
             AttributeDefinitions=[{"AttributeName": "txn_id", "AttributeType": "S"}],
             BillingMode="PAY_PER_REQUEST",
         )
-        log.info("Table '%s' created — waiting for ACTIVE", settings.dynamodb_table_name)
+        log.info("Table '%s' created â€” waiting for ACTIVE", settings.dynamodb_table_name)
     except ddb.meta.client.exceptions.ResourceInUseException:
-        log.info("Table '%s' already exists — waiting for ACTIVE", settings.dynamodb_table_name)
+        log.info("Table '%s' already exists â€” waiting for ACTIVE", settings.dynamodb_table_name)
 
-    # ← NEW: wait until table is fully ACTIVE before returning
+    # â† NEW: wait until table is fully ACTIVE before returning
     waiter = ddb.meta.client.get_waiter("table_exists")
     waiter.wait(
         TableName=settings.dynamodb_table_name,
@@ -68,3 +68,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -9,7 +9,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from shared.metrics.registry import (
+from metrics.registry import (
     PAYMENT_INITIATED_TOTAL,
     PAYMENT_AMOUNT_PAISE,
     PAYMENT_TOTAL_AMOUNT_PAISE,
@@ -109,3 +109,4 @@ async def payment_timer(payer_vpa: str, payee_vpa: str,
             error_kind   = ctx.error_kind if ctx.status == "FAILED" else None,
             duration_s   = time.perf_counter() - start,
         )
+

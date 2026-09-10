@@ -33,5 +33,6 @@ def complete(request: CompleteRequest):
 
 @router.get("/debug/records")
 def debug_records():
-    """Dev-only — inspect all in-memory records."""
-    return store.scan_all()    # ✅ was store.all_records()
+    """Dev-only â€” inspect all in-memory records."""
+    return store.scan_all()    # âœ… was store.all_records()
+

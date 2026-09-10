@@ -16,3 +16,4 @@ def resolve_route(request: RouteRequest,
 @router.get("/debug/routes")
 def debug_routes(service: RoutingService = Depends(get_routing_service)):
     return service._repo.find_all()
+

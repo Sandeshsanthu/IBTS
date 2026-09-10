@@ -28,5 +28,6 @@ def emit_settlement_event(txn_id: str, bank_code: str, amount_paise: int) -> Non
         sqs.send_message(QueueUrl=url, MessageBody=body)
         log.info("settlement event emitted txn_id=%s", txn_id)
     except Exception as exc:
-        # Fire-and-forget — never block the payment response
+        # Fire-and-forget â€” never block the payment response
         log.warning("SQS emit failed (non-fatal): %s", exc)
+

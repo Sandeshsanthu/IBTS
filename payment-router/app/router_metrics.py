@@ -9,7 +9,7 @@ import time
 from collections import deque
 from threading import Lock
 
-from shared.metrics.registry import (
+from metrics.registry import (
     VPA_RESOLUTION_TOTAL,
     VPA_RESOLUTION_LATENCY_SECONDS,
     ROUTE_CACHE_OPS_TOTAL,
@@ -64,3 +64,4 @@ def record_cache_op(bank_code: str, operation: str) -> None:
     ).inc()
     if operation in ("hit", "miss"):
         _update_hit_ratio(operation == "hit")
+

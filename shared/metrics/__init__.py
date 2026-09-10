@@ -4,7 +4,7 @@
 IBTS shared metrics package.
 
 Public surface:
-    from shared.metrics import (
+    from metrics import (
         MetricsMiddleware,
         metrics_router,
         TrackedRedis,
@@ -22,3 +22,4 @@ __all__ = [
     "TrackedRedis",
     "TrackedTable",
 ]
+

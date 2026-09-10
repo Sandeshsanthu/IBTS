@@ -5,7 +5,7 @@ Records idempotency check outcomes.
 Call after every key lookup, before returning to payment-switch.
 """
 
-from shared.metrics.registry import (
+from metrics.registry import (
     IDEMPOTENCY_CHECKS_TOTAL,
     IDEMPOTENCY_STALE_PROCESSING_TOTAL,
 )
@@ -24,3 +24,4 @@ def record_idem_check(result: str) -> None:
 
     if result == "STALE_PROCESSING":
         IDEMPOTENCY_STALE_PROCESSING_TOTAL.labels(service=_SERVICE).inc()
+

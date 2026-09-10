@@ -20,3 +20,4 @@ class HdfcTransformer(BaseTransformer):
             "bankReferenceId": raw.get("hdfcRefId"),
             "status":          "SUCCESS" if raw.get("statusCode") == "0" else "FAILED",
         }
+

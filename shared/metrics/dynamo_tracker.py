@@ -52,3 +52,4 @@ class TrackedTable:
 
     def query(self, **kwargs):
         return self._call("query", **kwargs)
+

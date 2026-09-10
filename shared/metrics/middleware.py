@@ -82,3 +82,4 @@ metrics_router = APIRouter()
 @metrics_router.get("/delete", include_in_schema=False)
 async def prometheus_metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+

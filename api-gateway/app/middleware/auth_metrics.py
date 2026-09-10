@@ -8,7 +8,7 @@ Place AFTER MetricsMiddleware so HTTP totals are still recorded.
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from shared.metrics.registry import AUTH_FAILURES_TOTAL
+from metrics.registry import AUTH_FAILURES_TOTAL
 
 _SERVICE      = "api-gateway"
 _VALID_KEYS   = {"ibts-api-key-dev", "ibts-api-key-dev-2"}   # load from env/secrets in prod
@@ -43,3 +43,4 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
 
         return await call_next(request)
+

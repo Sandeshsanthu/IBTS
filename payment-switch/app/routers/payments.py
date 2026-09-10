@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/v1/payments", tags=["payments"])
 @router.post("/initiate", response_model=PaymentResponse)
 async def initiate_payment(req: PaymentRequest):
 
-    # ── Step 1: Idempotency check ─────────────────────────────────────────
+    # â”€â”€ Step 1: Idempotency check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
         idm = await idm_client.check(req.idempotency_key)
     except Exception as exc:
@@ -27,7 +27,7 @@ async def initiate_payment(req: PaymentRequest):
     if idm.get("duplicate"):
         cached_raw = idm.get("responsePayload")
 
-        # Fast path — guard echoed the serialised payload back
+        # Fast path â€” guard echoed the serialised payload back
         if cached_raw:
             cached = json.loads(cached_raw) if isinstance(cached_raw, str) else cached_raw
             return PaymentResponse(
@@ -38,7 +38,7 @@ async def initiate_payment(req: PaymentRequest):
                 source="CACHED",
             )
 
-        # Slow path — guard returned no payload; look up by idempotency key via GSI
+        # Slow path â€” guard returned no payload; look up by idempotency key via GSI
         # NOTE: idm.get("transactionId") is the guard's internal key, NOT our txn_id UUID
         log.warning("responsePayload absent on duplicate; querying GSI key=%s", req.idempotency_key)
         record = dynamo.get_txn_by_idempotency_key(req.idempotency_key)
@@ -52,9 +52,9 @@ async def initiate_payment(req: PaymentRequest):
             )
 
         log.error("Duplicate key but no DynamoDB record found for key=%s", req.idempotency_key)
-        raise HTTPException(500, f"Duplicate request — original transaction not recoverable")
+        raise HTTPException(500, f"Duplicate request â€” original transaction not recoverable")
 
-    # ── Step 2: Create transaction record ─────────────────────────────────
+    # â”€â”€ Step 2: Create transaction record â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     txn = TxnRecord(
         idempotency_key=req.idempotency_key,
         payer_vpa=req.payer_vpa,
@@ -64,7 +64,7 @@ async def initiate_payment(req: PaymentRequest):
     )
     dynamo.write_txn(txn)
 
-    # ── Step 3: Resolve payee VPA → bank endpoint ─────────────────────────
+    # â”€â”€ Step 3: Resolve payee VPA â†’ bank endpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
         route = await rtr_client.resolve_vpa(req.payee_vpa)
     except httpx.HTTPStatusError as exc:
@@ -78,16 +78,16 @@ async def initiate_payment(req: PaymentRequest):
     primary_endpoint  = route.get("primaryEndpoint", "")
     fallback_endpoint = route.get("fallbackEndpoint", "")
 
-    # ── Step 4: Mark PROCESSING ───────────────────────────────────────────
+    # â”€â”€ Step 4: Mark PROCESSING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     dynamo.update_state(txn.txn_id, TxnState.PROCESSING, bank_code=bank_code)
 
-    # ── Step 5: Call bank adapter ─────────────────────────────────────────
+    # â”€â”€ Step 5: Call bank adapter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
         bank_resp = await adp_client.send_payment(
             txn_id=txn.txn_id,
-            bank_code=bank_code,                       # ← new
-            primary_endpoint=primary_endpoint,         # ← split from single endpoint
-            fallback_endpoint=fallback_endpoint,       # ← split from single endpoint
+            bank_code=bank_code,                       # â† new
+            primary_endpoint=primary_endpoint,         # â† split from single endpoint
+            fallback_endpoint=fallback_endpoint,       # â† split from single endpoint
             amount_paise=req.amount_paise,
             payer_vpa=req.payer_vpa,
             payee_vpa=req.payee_vpa,
@@ -98,9 +98,9 @@ async def initiate_payment(req: PaymentRequest):
         raise HTTPException(502, "bank-adapter call failed")
 
     adapter_status = bank_resp.get("status", "FAILED")
-    bank_rrn       = bank_resp.get("bankReferenceId")  # ← was "rrn"
+    bank_rrn       = bank_resp.get("bankReferenceId")  # â† was "rrn"
 
-    # ── Step 6: Finalise state ────────────────────────────────────────────
+    # â”€â”€ Step 6: Finalise state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     final_state = TxnState.SUCCESS if adapter_status == "SUCCESS" else TxnState.FAILED
     dynamo.update_state(txn.txn_id, final_state, bank_rrn=bank_rrn)
 
@@ -108,11 +108,11 @@ async def initiate_payment(req: PaymentRequest):
         txn_id=txn.txn_id,
         status=final_state,
         bank_rrn=bank_rrn,
-        message=bank_resp.get("errorMessage") or adapter_status,  # ← richer error
+        message=bank_resp.get("errorMessage") or adapter_status,  # â† richer error
         source="NEW",
     )
 
-    # ── Step 7: Cache result + async settlement emit ──────────────────────
+    # â”€â”€ Step 7: Cache result + async settlement emit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     await idm_client.complete(
         transaction_id=txn.txn_id,
         final_status=final_state.value,
@@ -142,3 +142,4 @@ async def get_payment(txn_id: str):
         message=record.get("error") or record["state"],
         source="DB",
     )
+

@@ -14,3 +14,4 @@ def get_service() -> AdapterService:
 async def send(req: AdapterRequest,
                service: AdapterService = Depends(get_service)):
     return await service.send(req)
+

@@ -23,7 +23,7 @@ def _get_table():
 
 
 def ensure_table_exists():
-    """Idempotent bootstrap — safe to call on every startup."""
+    """Idempotent bootstrap â€” safe to call on every startup."""
     client = boto3.client(
         "dynamodb",
         region_name=settings.AWS_DEFAULT_REGION,
@@ -52,7 +52,7 @@ def ensure_table_exists():
         logger.info("TTL enabled on '%s'.", settings.DYNAMODB_TABLE_NAME)
     except ClientError as e:
         if e.response["Error"]["Code"] == "ResourceInUseException":
-            logger.info("Table '%s' already exists — skipping.", settings.DYNAMODB_TABLE_NAME)
+            logger.info("Table '%s' already exists â€” skipping.", settings.DYNAMODB_TABLE_NAME)
         else:
             logger.error("Failed to bootstrap table: %s", e)
             raise
@@ -89,7 +89,7 @@ def find_by_key(idempotency_key: str) -> dict | None:
 
 
 def complete(idempotency_key: str, final_status: str, response_payload: str | None):
-    """Conditional update — only transitions from PROCESSING."""
+    """Conditional update â€” only transitions from PROCESSING."""
     table = _get_table()
     try:
         table.update_item(
@@ -106,7 +106,7 @@ def complete(idempotency_key: str, final_status: str, response_payload: str | No
         logger.info("Complete success key=%s status=%s", idempotency_key, final_status)
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
-            logger.warning("Complete skipped — not PROCESSING key=%s", idempotency_key)
+            logger.warning("Complete skipped â€” not PROCESSING key=%s", idempotency_key)
         else:
             logger.error("Complete error: %s", e)
             raise

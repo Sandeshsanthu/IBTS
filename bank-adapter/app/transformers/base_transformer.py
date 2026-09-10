@@ -12,3 +12,4 @@ class BaseTransformer(ABC):
     @abstractmethod
     def from_bank_response(self, raw: dict) -> dict:
         """Normalize bank-specific response to unified format."""
+

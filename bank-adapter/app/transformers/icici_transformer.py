@@ -20,3 +20,4 @@ class IciciTransformer(BaseTransformer):
             "bankReferenceId": raw.get("iciciBankRef"),
             "status":          "SUCCESS" if raw.get("txnStatus") == "SUCCESS" else "FAILED",
         }
+

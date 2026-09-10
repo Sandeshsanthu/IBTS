@@ -34,7 +34,7 @@ def check(idempotency_key: str, caller_service: str, request: CheckRequest) -> C
     inserted = store.insert_if_absent(new_record)
 
     if not inserted:
-        # Race condition — another thread just inserted it
+        # Race condition â€” another thread just inserted it
         existing = store.find_by_key(idempotency_key)
         logger.info("Race condition resolved key=%s", idempotency_key)
         return CheckResponse(
@@ -51,3 +51,4 @@ def check(idempotency_key: str, caller_service: str, request: CheckRequest) -> C
 def complete(request: CompleteRequest):
     store.complete(request.transactionId, request.finalStatus, request.responsePayload)
     logger.info("Completed transactionId=%s status=%s", request.transactionId, request.finalStatus)
+

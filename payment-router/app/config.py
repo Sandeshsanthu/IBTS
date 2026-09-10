@@ -7,11 +7,11 @@ class Settings(BaseSettings):
     app_name: str           = "payment-router"
     port: int               = 8081
 
-    # DynamoDB — matches docker-compose env var names exactly
+    # DynamoDB â€” matches docker-compose env var names exactly
     aws_region: str             = "ap-south-1"
-    dynamo_endpoint: str        = "http://localstack:4566"   # ← localstack, not dynamodb-local
-    aws_access_key_id: str      = "test"                     # ← matches AWS_ACCESS_KEY_ID
-    aws_secret_access_key: str  = "test"                     # ← matches AWS_SECRET_ACCESS_KEY
+    dynamo_endpoint: str        = "http://localstack:4566"   # â† localstack, not dynamodb-local
+    aws_access_key_id: str      = "test"                     # â† matches AWS_ACCESS_KEY_ID
+    aws_secret_access_key: str  = "test"                     # â† matches AWS_SECRET_ACCESS_KEY
     routing_table_name: str     = "routing-table"
 
     # Redis
@@ -23,3 +23,4 @@ class Settings(BaseSettings):
         env_file = ".env"
 
 settings = Settings()
+

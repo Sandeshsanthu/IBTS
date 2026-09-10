@@ -14,7 +14,7 @@ from app.models import RouteRequest
 
 router = APIRouter(prefix="/api/v1/payment", tags=["payment"])
 
-# ── Config from env (injected by docker-compose) ──────────────────────────
+# â”€â”€ Config from env (injected by docker-compose) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 BANK_ADAPTER_URL = os.getenv(
     "BANK_ADAPTER_URL",
     "http://bank-adapter:8082/api/v1/adapter/send"
@@ -45,11 +45,11 @@ def _get_routing_service() -> RoutingService:
 
 @router.post("/initiate")
 async def initiate(req: PaymentRequest):
-    # Step 1 — resolve route via existing routing service
+    # Step 1 â€” resolve route via existing routing service
     routing_svc = _get_routing_service()
     route = routing_svc.resolve(RouteRequest(vpa=req.payerVpa))
 
-    # Step 2 — forward to bank-adapter
+    # Step 2 â€” forward to bank-adapter
     adapter_payload = {
         "transactionId":    req.transactionId,
         "bankCode":         route.bankCode,
@@ -77,3 +77,4 @@ async def initiate(req: PaymentRequest):
                 status_code=502,
                 detail=f"bank-adapter unreachable: {str(e)}"
             )
+

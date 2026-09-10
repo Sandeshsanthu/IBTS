@@ -49,3 +49,4 @@ async def verify_auth(request: Request) -> dict:
     claims = _verify_jwt(token)
     log.debug("auth=jwt sub=%s ip=%s", claims.get("sub"), request.client.host)
     return claims
+

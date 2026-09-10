@@ -8,7 +8,7 @@ import time
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from shared.metrics.registry import RATE_LIMIT_HITS_TOTAL, RATE_LIMIT_REMAINING
+from metrics.registry import RATE_LIMIT_HITS_TOTAL, RATE_LIMIT_REMAINING
 
 _SERVICE       = "api-gateway"
 _WINDOW_SECS   = 60
@@ -57,3 +57,4 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         response.headers["X-RateLimit-Reset"]     = str(int(time.time()) + max(ttl, 0))
         return response
+

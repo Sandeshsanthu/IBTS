@@ -13,3 +13,4 @@ async def resolve_vpa(vpa: str) -> dict:
         r = await c.post(f"{_BASE}/api/v1/route/resolve", json={"vpa": vpa})
         r.raise_for_status()
         return r.json()
+

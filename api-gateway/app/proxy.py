@@ -33,7 +33,7 @@ async def proxy_request(
         "X-Request-ID", request.state.request_id
     )
 
-    body = await request.body()   # Starlette caches — safe to call multiple times
+    body = await request.body()   # Starlette caches â€” safe to call multiple times
 
     try:
         upstream_resp = await client.request(
@@ -61,3 +61,4 @@ async def proxy_request(
         headers=resp_headers,
         media_type=upstream_resp.headers.get("content-type"),
     )
+

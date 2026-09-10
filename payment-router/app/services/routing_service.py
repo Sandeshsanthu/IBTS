@@ -17,7 +17,7 @@ CACHE_PREFIX = "route:"
 
 
 class DecimalEncoder(json.JSONEncoder):
-    """boto3 DynamoDB resource returns Decimal — json.dumps needs this."""
+    """boto3 DynamoDB resource returns Decimal â€” json.dumps needs this."""
     def default(self, obj):
         if isinstance(obj, Decimal):
             return int(obj) if obj % 1 == 0 else float(obj)
@@ -43,20 +43,20 @@ class RoutingService:
             route = json.loads(cached)
             return self._build_response(route, "CACHE", ttl_ms)
 
-        # 2. Cache miss — read DynamoDB
-        logger.info("Cache MISS for bankCode=%s — reading DynamoDB", bank_code)
+        # 2. Cache miss â€” read DynamoDB
+        logger.info("Cache MISS for bankCode=%s â€” reading DynamoDB", bank_code)
         route = self._repo.find_by_bank_code(bank_code)
         if not route:
             from fastapi import HTTPException
             raise HTTPException(status_code=404,
                                 detail=f"No active route for bankCode: {bank_code}")
 
-        # 3. Repopulate cache — DecimalEncoder handles boto3 Decimal types
+        # 3. Repopulate cache â€” DecimalEncoder handles boto3 Decimal types
         try:
             self._redis.setex(
                 cache_key,
                 settings.cache_ttl_seconds,
-                json.dumps(route, cls=DecimalEncoder)   # ← the fix
+                json.dumps(route, cls=DecimalEncoder)   # â† the fix
             )
             logger.info("Cache WRITE for bankCode=%s TTL=%ds", bank_code, settings.cache_ttl_seconds)
         except Exception as e:
@@ -64,7 +64,7 @@ class RoutingService:
 
         return self._build_response(route, "DB", settings.cache_ttl_seconds * 1000)
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _extract_bank_code(self, request: RouteRequest) -> str:
         from fastapi import HTTPException
@@ -89,3 +89,4 @@ class RoutingService:
             resolvedFrom     = source,
             ttlRemainingMs   = ttl_ms,
         )
+

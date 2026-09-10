@@ -50,3 +50,4 @@ class TrackedRedis:
 
     async def expire(self, key: str, seconds: int):
         return await self._call("EXPIRE", self._r.expire(key, seconds))
+

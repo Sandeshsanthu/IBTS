@@ -57,10 +57,14 @@ services:
     networks:
       - ibts-network
 
+  # ─────────────────────────────────────────────
+  # APP SERVICES
+  # ─────────────────────────────────────────────
+
   idempotency-guard:
     build:
-      context: ./idempotency-guard
-      dockerfile: Dockerfile
+      context: .                                    # ← CHANGED: was ./idempotency-guard
+      dockerfile: idempotency-guard/Dockerfile      # ← CHANGED: path includes subfolder
     container_name: idempotency-guard
     expose:
       - "8080"
@@ -72,6 +76,13 @@ services:
       - DYNAMODB_ENDPOINT_URL=http://localstack:4566
       - DYNAMODB_TABLE_NAME=IdempotencyRecords
       - IDEMPOTENCY_TTL_HOURS=24
+      - OTEL_SERVICE_NAME=idempotency-guard
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://ibts-otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_PYTHON_LOG_CORRELATION=true
     depends_on:
       localstack:
         condition: service_healthy
@@ -86,8 +97,8 @@ services:
 
   bank-adapter:
     build:
-      context: ./bank-adapter
-      dockerfile: Dockerfile
+      context: .                                    # ← CHANGED: was ./bank-adapter
+      dockerfile: bank-adapter/Dockerfile           # ← CHANGED: path includes subfolder
     container_name: bank-adapter
     expose:
       - "8082"
@@ -97,6 +108,13 @@ services:
       - FALLBACK_TIMEOUT_SECONDS=5.0
       - BREAKER_FAIL_MAX=3
       - BREAKER_RESET_TIMEOUT=30
+      - OTEL_SERVICE_NAME=bank-adapter
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://ibts-otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_PYTHON_LOG_CORRELATION=true
     depends_on:
       mock-bank-server:
         condition: service_healthy
@@ -111,8 +129,8 @@ services:
 
   payment-router:
     build:
-      context: ./payment-router
-      dockerfile: Dockerfile
+      context: .                                    # ← CHANGED: was ./payment-router
+      dockerfile: payment-router/Dockerfile         # ← CHANGED: path includes subfolder
     container_name: payment-router
     expose:
       - "8081"
@@ -128,6 +146,13 @@ services:
       - REDIS_PORT=6379
       - CACHE_TTL_SECONDS=300
       - BANK_ADAPTER_URL=http://bank-adapter:8082/api/v1/adapter/send
+      - OTEL_SERVICE_NAME=payment-router
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://ibts-otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_PYTHON_LOG_CORRELATION=true
     depends_on:
       localstack:
         condition: service_healthy
@@ -146,8 +171,8 @@ services:
 
   payment-switch:
     build:
-      context: .                              # ← CHANGED: was ./payment-switch
-      dockerfile: payment-switch/Dockerfile  # ← CHANGED: explicit path since context is now root
+      context: .                                    # ← already correct, no change
+      dockerfile: payment-switch/Dockerfile
     container_name: payment-switch
     expose:
       - "8083"
@@ -163,6 +188,13 @@ services:
       - IDEMPOTENCY_GUARD_URL=http://idempotency-guard:8080
       - PAYMENT_ROUTER_URL=http://payment-router:8081
       - BANK_ADAPTER_URL=http://bank-adapter:8082
+      - OTEL_SERVICE_NAME=payment-switch
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://ibts-otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_PYTHON_LOG_CORRELATION=true
     depends_on:
       idempotency-guard:
         condition: service_healthy
@@ -181,8 +213,8 @@ services:
 
   api-gateway:
     build:
-      context: ./api-gateway
-      dockerfile: Dockerfile
+      context: .                                    # ← CHANGED: was ./api-gateway
+      dockerfile: api-gateway/Dockerfile            # ← CHANGED: path includes subfolder
     container_name: api-gateway
     ports:
       - "8084:8084"
@@ -197,6 +229,13 @@ services:
       - RL_PER_VPA_REQUESTS=10
       - RL_WINDOW_SECONDS=60
       - ENV=local
+      - OTEL_SERVICE_NAME=api-gateway
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://ibts-otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+      - OTEL_PYTHON_LOG_CORRELATION=true
     depends_on:
       payment-switch:
         condition: service_healthy

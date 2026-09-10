@@ -10,12 +10,12 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# ── Environment ───────────────────────────────────────────────────
+# â”€â”€ Environment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _ENV      = os.getenv("ENV", "prod").lower()
 _IS_LOCAL = _ENV == "local"
 _MOCK     = "http://mock-bank-server:8080/mock"
 
-# ── Seed data ─────────────────────────────────────────────────────
+# â”€â”€ Seed data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 _SEED_ROUTES_PROD = [
     ("SBI",      "State Bank of India",       "https://upi.sbi.co.in/txn",        "https://upi2.sbi.co.in/txn"),
     ("ICICI",    "ICICI Bank",                "https://upi.icicibank.com/txn",     "https://upi2.icicibank.com/txn"),
@@ -52,7 +52,7 @@ SEED_ROUTES = _SEED_ROUTES_LOCAL if _IS_LOCAL else _SEED_ROUTES_PROD
 logger.info("Routing seed mode: ENV=%s  routes=%d", _ENV, len(SEED_ROUTES))
 
 
-# ── Repository — unchanged from here down ─────────────────────────
+# â”€â”€ Repository â€” unchanged from here down â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class RoutingRepository:
 
     def __init__(self):
@@ -80,7 +80,7 @@ class RoutingRepository:
             self._seed()
 
         except self._client.meta.client.exceptions.ResourceInUseException:
-            logger.info("Table already exists — skipping seed: %s", settings.routing_table_name)
+            logger.info("Table already exists â€” skipping seed: %s", settings.routing_table_name)
             self._table = self._client.Table(settings.routing_table_name)
             self._table.wait_until_exists()
 
@@ -105,3 +105,4 @@ class RoutingRepository:
 
     def find_all(self) -> list[dict]:
         return self._table.scan().get("Items", [])
+

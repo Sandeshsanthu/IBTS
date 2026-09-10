@@ -24,7 +24,7 @@ async def send_payment(
         "bankCode":         bank_code,
         "primaryEndpoint":  primary_endpoint,
         "fallbackEndpoint": fallback_endpoint,
-        "amount":           round(amount_paise / 100, 2),  # paise → rupees
+        "amount":           round(amount_paise / 100, 2),  # paise â†’ rupees
         "currency":         "INR",
         "payerVpa":         payer_vpa,
         "payeeVpa":         payee_vpa,
@@ -34,3 +34,4 @@ async def send_payment(
         r = await c.post(f"{_BASE}/api/v1/adapter/send", json=payload)
         r.raise_for_status()
         return r.json()
+

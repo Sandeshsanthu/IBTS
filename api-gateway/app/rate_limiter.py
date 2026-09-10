@@ -15,8 +15,8 @@ class RateLimiter:
     Sliding-window rate limiter backed by Redis sorted sets.
 
     Key layout:
-      rl:ip:{client_ip}       → 100 req / 60s
-      rl:vpa:{debit_vpa}      → 10  req / 60s
+      rl:ip:{client_ip}       â†’ 100 req / 60s
+      rl:vpa:{debit_vpa}      â†’ 10  req / 60s
     """
 
     def __init__(self, client: aioredis.Redis, cfg=settings):
@@ -52,3 +52,4 @@ class RateLimiter:
         if not allowed:
             log.warning("rate_limit=VPA vpa=%s count_over_limit=True", vpa)
         return allowed, remaining
+

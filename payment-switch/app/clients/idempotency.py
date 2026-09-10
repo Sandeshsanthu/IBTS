@@ -13,7 +13,7 @@ _SERVICE = "payment-switch"
 async def check(key: str) -> dict:
     """
     Returns CheckResponse dict.
-    Guard returns 200 for NEW, 409 for DUPLICATE — both are valid business
+    Guard returns 200 for NEW, 409 for DUPLICATE â€” both are valid business
     responses; only 4xx/5xx other than 409 are true errors.
     """
     async with httpx.AsyncClient(timeout=3.0) as c:
@@ -25,7 +25,7 @@ async def check(key: str) -> dict:
             },
             json={"transactionRefId": key},
         )
-        if r.status_code == 409:          # ← DUPLICATE: valid, don't raise
+        if r.status_code == 409:          # â† DUPLICATE: valid, don't raise
             return r.json()
         r.raise_for_status()              # raises on other 4xx/5xx
         return r.json()
@@ -46,3 +46,4 @@ async def complete(
             },
         )
         r.raise_for_status()
+

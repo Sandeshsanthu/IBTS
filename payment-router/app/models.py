@@ -13,7 +13,7 @@ class RouteRequest(BaseModel):
         has_vpa  = bool(self.vpa  and self.vpa.strip())
         has_ifsc = bool(self.ifsc and self.ifsc.strip())
         if has_vpa == has_ifsc:   # both True or both False
-            raise ValueError("Provide either vpa or ifsc — not both and not neither")
+            raise ValueError("Provide either vpa or ifsc â€” not both and not neither")
         return self
 
 class RouteResponse(BaseModel):
@@ -28,3 +28,4 @@ class ErrorResponse(BaseModel):
     status:    int
     message:   str
     timestamp: str
+

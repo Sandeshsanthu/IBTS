@@ -9,7 +9,7 @@ import sys
 import urllib.request
 
 def check_imports():
-    from shared.metrics.registry import (
+    from metrics.registry import (
         HTTP_REQUESTS_TOTAL, HTTP_REQUEST_DURATION_SECONDS,
         AUTH_FAILURES_TOTAL, RATE_LIMIT_HITS_TOTAL,
         PAYMENT_INITIATED_TOTAL, PAYMENT_E2E_LATENCY_SECONDS,
@@ -36,3 +36,4 @@ if __name__ == "__main__":
     check_imports()
     check_metrics_endpoint(port=port)
     print("  All checks passed.")
+

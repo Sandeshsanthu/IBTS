@@ -25,3 +25,4 @@ class AdapterResponse(BaseModel):
     responseTimeMs:   int
     errorCode:        Optional[str]  = None
     errorMessage:     Optional[str]  = None
+

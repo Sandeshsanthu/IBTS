@@ -4,7 +4,7 @@
 import boto3
 import logging
 from datetime import datetime, timezone
-from boto3.dynamodb.conditions import Attr          # ← Attr, not Key (no GSI needed)
+from boto3.dynamodb.conditions import Attr          # â† Attr, not Key (no GSI needed)
 from app.config import settings
 from app.models import TxnRecord, TxnState
 
@@ -55,7 +55,7 @@ def update_state(
         ExpressionAttributeNames=names,
         ExpressionAttributeValues=vals,
     )
-    log.info("txn_id=%s → %s", txn_id, state)
+    log.info("txn_id=%s â†’ %s", txn_id, state)
 
 
 def get_txn(txn_id: str) -> dict | None:
@@ -66,13 +66,14 @@ def get_txn(txn_id: str) -> dict | None:
 def get_txn_by_idempotency_key(idempotency_key: str) -> dict | None:
     """
     Scan table for matching idempotency_key.
-    No GSI required — acceptable for low-volume test/dev use.
+    No GSI required â€” acceptable for low-volume test/dev use.
     For production: replace with a GSI query (see Path B).
     """
-    resp = _table().scan(                           # ← no GSI, no infra change
+    resp = _table().scan(                           # â† no GSI, no infra change
         FilterExpression=Attr("idempotency_key").eq(idempotency_key)
-        # No Limit: DynamoDB Limit caps items *scanned*, not returned —
+        # No Limit: DynamoDB Limit caps items *scanned*, not returned â€”
         # omitting it guarantees we don't miss the record in a small table
     )
     items = resp.get("Items", [])
     return items[0] if items else None
+

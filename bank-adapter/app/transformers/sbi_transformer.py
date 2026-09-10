@@ -21,3 +21,4 @@ class SbiTransformer(BaseTransformer):
             "bankReferenceId": raw.get("sbiRefNo") or raw.get("refId"),
             "status":          "SUCCESS" if raw.get("respCode") == "00" else "FAILED",
         }
+

@@ -19,3 +19,4 @@ class CheckResponse(BaseModel):
     status: str
     transactionId: str
     responsePayload: Optional[str] = None
+

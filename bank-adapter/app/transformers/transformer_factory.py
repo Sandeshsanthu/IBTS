@@ -15,3 +15,4 @@ _REGISTRY: dict[str, BaseTransformer] = {
 
 def get_transformer(bank_code: str) -> BaseTransformer:
     return _REGISTRY.get(bank_code.upper(), DefaultTransformer())
+
