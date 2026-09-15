@@ -31,9 +31,34 @@ def check_metrics_endpoint(host: str = "localhost", port: int = 8084):
         print(f"  [FAIL] /metrics not reachable at {url}: {exc}")
         sys.exit(1)
 
+
+from metrics.registry import (
+    DUPLICATE_DEBIT_TOTAL,
+    PAYMENT_STATE_CORRUPTION_TOTAL,
+)
+
+
+def record_state_corruption(violation: str) -> None:
+    PAYMENT_STATE_CORRUPTION_TOTAL.labels(
+        service="payment-switch",
+        violation=violation,
+    ).inc()
+
+
+def record_duplicate_debit(detection_type: str) -> None:
+    DUPLICATE_DEBIT_TOTAL.labels(
+        service="bank-adapter",
+        detection_type=detection_type,
+    ).inc()
+
+
+
+
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8084
     check_imports()
     check_metrics_endpoint(port=port)
     print("  All checks passed.")
+
+
 

@@ -113,6 +113,18 @@ PAYMENT_ERRORS_TOTAL = Counter(
     [L_PAYEE_BANK, L_ERROR_KIND],
 )
 
+PAYMENT_STATE_CORRUPTION_TOTAL = Counter(
+    "ibts_payment_state_corruption_total",
+    "Confirmed payment state integrity violations.",
+    ["service", "violation"],
+)
+
+DUPLICATE_DEBIT_TOTAL = Counter(
+    "ibts_duplicate_debit_total",
+    "Confirmed duplicate successful debit events.",
+    ["service", "detection_type"],
+)
+
 # ==============================================================================
 # Idempotency Service
 # ==============================================================================

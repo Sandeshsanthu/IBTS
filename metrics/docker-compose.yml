@@ -161,6 +161,7 @@ services:
       ES_SERVER_URLS: http://elasticsearch:9200
       ES_TAGS_AS_FIELDS_ALL: "true"
       LOG_LEVEL: info
+      COLLECTOR_OTLP_ENABLED: "true"
     networks:
       - ibts-network
     depends_on:
