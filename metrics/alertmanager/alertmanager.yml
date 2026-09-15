@@ -3,39 +3,49 @@
 
 global:
   resolve_timeout: 5m
-  slack_api_url: "http://placeholder-slack-webhook"   # ← real URL at deploy time
+  slack_api_url: "http://placeholder-slack-webhook"
 
 route:
   receiver: default
-  group_by: [alertname, bank_code, service]
-  group_wait:      30s
-  group_interval:  5m
+  group_by:
+    - alertname
+    - category
+    - service
+    - bank_code
+  group_wait: 30s
+  group_interval: 5m
   repeat_interval: 1h
 
   routes:
     - match:
+        severity: p0
+      receiver: slack-p0
+      group_wait: 10s
+      repeat_interval: 5m
+
+    - match:
         severity: critical
       receiver: slack-critical
-      group_wait:      10s
+      group_wait: 10s
       repeat_interval: 5m
       continue: true
 
     - match:
         severity: warning
       receiver: slack-warning
-      group_wait:      5m
+      group_wait: 5m
       repeat_interval: 30m
 
     - match:
         team: security
       receiver: slack-security
-      group_wait:      10s
+      group_wait: 10s
       repeat_interval: 5m
 
     - match:
         team: platform
       receiver: slack-platform
-      group_wait:      2m
+      group_wait: 2m
       repeat_interval: 30m
 
 inhibit_rules:
@@ -43,7 +53,8 @@ inhibit_rules:
       alertname: CircuitBreakerOpen
     target_match_re:
       alertname: BankLatencyHigh|BankFallbackSustained
-    equal: [bank_code]
+    equal:
+      - bank_code
 
   - source_match:
       alertname: RedisDown
@@ -68,6 +79,23 @@ receivers:
           *Severity:* {{ .Labels.severity }}
           *Service:* {{ .Labels.service }}
           *Bank:* {{ .Labels.bank_code }}
+          *Category:* {{ .Labels.category }}
+          {{ end }}
+        send_resolved: true
+
+  - name: slack-p0
+    slack_configs:
+      - channel: "#ibts-alerts-p0"
+        color: "danger"
+        title: "[P0] {{ .GroupLabels.alertname }}"
+        text: >-
+          {{ range .Alerts }}
+          *Alert:* {{ .Annotations.summary }}
+          *Severity:* {{ .Labels.severity }}
+          *Category:* {{ .Labels.category }}
+          *Service:* {{ .Labels.service }}
+          *Bank:* {{ .Labels.bank_code }}
+          *Runbook:* {{ .Annotations.runbook }}
           {{ end }}
         send_resolved: true
 
@@ -75,12 +103,12 @@ receivers:
     slack_configs:
       - channel: "#ibts-alerts-critical"
         color: "danger"
-        title: ":fire: CRITICAL: {{ .GroupLabels.alertname }}"
+        title: "[CRITICAL] {{ .GroupLabels.alertname }}"
         text: >-
           {{ range .Alerts }}
-          *{{ .Annotations.summary }}*
-          Started: {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
-          {{ if .Annotations.runbook }}Runbook: {{ .Annotations.runbook }}{{ end }}
+          *Alert:* {{ .Annotations.summary }}
+          *Started:* {{ .StartsAt.Format "2006-01-02 15:04:05 UTC" }}
+          *Runbook:* {{ .Annotations.runbook }}
           {{ end }}
         send_resolved: true
 
@@ -88,10 +116,12 @@ receivers:
     slack_configs:
       - channel: "#ibts-alerts-warning"
         color: "warning"
-        title: ":warning: WARNING: {{ .GroupLabels.alertname }}"
+        title: "[WARNING] {{ .GroupLabels.alertname }}"
         text: >-
           {{ range .Alerts }}
-          {{ .Annotations.summary }}
+          *Alert:* {{ .Annotations.summary }}
+          *Service:* {{ .Labels.service }}
+          *Bank:* {{ .Labels.bank_code }}
           {{ end }}
         send_resolved: true
 
@@ -99,10 +129,11 @@ receivers:
     slack_configs:
       - channel: "#ibts-alerts-security"
         color: "danger"
-        title: ":lock: SECURITY: {{ .GroupLabels.alertname }}"
+        title: "[SECURITY] {{ .GroupLabels.alertname }}"
         text: >-
           {{ range .Alerts }}
-          {{ .Annotations.summary }}
+          *Alert:* {{ .Annotations.summary }}
+          *Runbook:* {{ .Annotations.runbook }}
           {{ end }}
         send_resolved: true
 
@@ -110,9 +141,10 @@ receivers:
     slack_configs:
       - channel: "#ibts-alerts-platform"
         color: "warning"
-        title: ":gear: PLATFORM: {{ .GroupLabels.alertname }}"
+        title: "[PLATFORM] {{ .GroupLabels.alertname }}"
         text: >-
           {{ range .Alerts }}
-          {{ .Annotations.summary }}
+          *Alert:* {{ .Annotations.summary }}
+          *Service:* {{ .Labels.service }}
           {{ end }}
         send_resolved: true

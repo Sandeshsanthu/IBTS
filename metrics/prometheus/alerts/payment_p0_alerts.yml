@@ -27,33 +27,32 @@ groups:
           description: "Payment success rate is {{ $value | humanizePercentage }} over the last five minutes."
           runbook: "payment-success-rate"
 
-
       - alert: PaymentStateCorruptionP0
-          expr: |
-            sum by (service, violation) (
-              increase(ibts_payment_state_corruption_total[1m])
-            ) > 0
-          for: 15s
-          labels:
-            severity: p0
-            team: payments
-            category: payment-integrity
-          annotations:
-            summary: "P0: payment state corruption detected"
-            description: "A confirmed payment state integrity violation occurred."
-            runbook: "payment-state-integrity"
+        expr: |
+          sum by (service, violation) (
+            increase(ibts_payment_state_corruption_total[1m])
+          ) > 0
+        for: 15s
+        labels:
+          severity: p0
+          team: payments
+          category: payment-integrity
+        annotations:
+          summary: "P0: payment state corruption detected"
+          description: "A confirmed payment state integrity violation occurred."
+          runbook: "payment-state-integrity"
 
       - alert: DuplicateDebitP0
-          expr: |
+        expr: |
           sum by (service, detection_type) (
-                  increase(ibts_duplicate_debit_total[5m])
-                ) > 0
-              for: 15s
-              labels:
-                severity: p0
-                team: payments
-                category: payment-integrity
-              annotations:
-                summary: "P0: duplicate debit detected"
-                description: "A confirmed payment appears to have produced multiple successful debits."
-                runbook: "duplicate-debit"
+            increase(ibts_duplicate_debit_total[5m])
+          ) > 0
+        for: 15s
+        labels:
+          severity: p0
+          team: payments
+          category: payment-integrity
+        annotations:
+          summary: "P0: duplicate debit detected"
+          description: "A confirmed payment appears to have produced multiple successful debits."
+          runbook: "duplicate-debit"

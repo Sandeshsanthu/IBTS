@@ -2,7 +2,7 @@
 # filename: metrics/prometheus/prometheus.yml
 
 global:
-  scrape_interval:     15s
+  scrape_interval: 15s
   evaluation_interval: 15s
   external_labels:
     environment: local
@@ -10,8 +10,10 @@ global:
 
 rule_files:
   - "alerts/payment_alerts.yml"
+  - "alerts/payment_p0_alerts.yml"
   - "alerts/sla_alerts.yml"
   - "alerts/infrastructure_alerts.yml"
+  - "alerts/local_test_alert.yml"
 
 alerting:
   alertmanagers:
@@ -19,7 +21,6 @@ alerting:
         - targets: ["alertmanager:9093"]
 
 scrape_configs:
-
   - job_name: api-gateway
     static_configs:
       - targets: ["api-gateway:8084"]
@@ -63,9 +64,16 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  - job_name: otel-collector
+  - job_name: otel-exported-metrics
     static_configs:
       - targets: ["ibts-otel-collector:8888"]
+    relabel_configs:
+      - target_label: service
+        replacement: otel-exported-metrics
+
+  - job_name: otel-collector-telemetry
+    static_configs:
+      - targets: ["ibts-otel-collector:8889"]
     relabel_configs:
       - target_label: service
         replacement: otel-collector
