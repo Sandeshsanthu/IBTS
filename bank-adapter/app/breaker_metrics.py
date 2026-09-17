@@ -7,7 +7,7 @@ pybreaker listener that emits circuit breaker metrics on every state change.
 import time
 import pybreaker
 
-from metrics.registry import (
+from shared.metrics.registry import (          # ← fixed: metrics → shared.metrics
     CIRCUIT_BREAKER_STATE,
     CIRCUIT_BREAKER_FAIL_COUNT,
     CIRCUIT_BREAKER_TRANSITIONS_TOTAL,
@@ -15,7 +15,7 @@ from metrics.registry import (
     CIRCUIT_BREAKER_REJECTED_TOTAL,
 )
 
-_STATE_INT = {"closed": 0, "open": 1, "half_open": 2}
+_STATE_INT   = {"closed": 0, "open": 1, "half_open": 2}
 _open_since: dict[str, float] = {}
 
 
@@ -54,9 +54,12 @@ class IBTSBreakerListener(pybreaker.CircuitBreakerListener):
         CIRCUIT_BREAKER_STATE.labels(bank_code=self.bank).set(0)
 
 
-def make_breaker(bank_code: str, fail_max: int = 3,
-                 reset_timeout: int = 30) -> pybreaker.CircuitBreaker:
-    """Factory â€” returns an instrumented CircuitBreaker for a given bank."""
+def make_breaker(
+    bank_code:     str,
+    fail_max:      int = 3,
+    reset_timeout: int = 30,
+) -> pybreaker.CircuitBreaker:
+    """Factory — returns an instrumented CircuitBreaker for a given bank."""
     breaker = pybreaker.CircuitBreaker(
         fail_max      = fail_max,
         reset_timeout = reset_timeout,
@@ -67,4 +70,3 @@ def make_breaker(bank_code: str, fail_max: int = 3,
     CIRCUIT_BREAKER_STATE.labels(bank_code=bank_code).set(0)
     CIRCUIT_BREAKER_FAIL_COUNT.labels(bank_code=bank_code).set(0)
     return breaker
-

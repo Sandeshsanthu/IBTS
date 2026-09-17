@@ -10,8 +10,9 @@ RUN apt-get update \
 
 WORKDIR /service
 
-COPY shared/ /ibts-shared/
-RUN pip install --no-cache-dir /ibts-shared/
+COPY shared/ /packages/shared/
+COPY shared/shared/ /packages/shared/
+ENV PYTHONPATH=/packages
 
 COPY api-gateway/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
