@@ -18,7 +18,7 @@ from app.auth import verify_auth
 from app.config import settings
 from app.proxy import proxy_request
 from app.rate_limiter import RateLimiter
-from metrics.middleware import MetricsMiddleware
+from shared.metrics.middleware import MetricsMiddleware
 from shared.telemetry import setup_telemetry
 
 

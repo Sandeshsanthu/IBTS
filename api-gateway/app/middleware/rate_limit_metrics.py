@@ -8,7 +8,7 @@ import time
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from metrics.registry import RATE_LIMIT_HITS_TOTAL, RATE_LIMIT_REMAINING
+from shared.metrics.registry import RATE_LIMIT_HITS_TOTAL, RATE_LIMIT_REMAINING
 
 _SERVICE       = "api-gateway"
 _WINDOW_SECS   = 60

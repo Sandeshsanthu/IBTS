@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from starlette.routing import Mount
 from prometheus_client import make_asgi_app
 
-from metrics.middleware import MetricsMiddleware
+from shared.metrics.middleware import MetricsMiddleware
 from app.routers.payments import router as payments_router
 from app.config import settings
 

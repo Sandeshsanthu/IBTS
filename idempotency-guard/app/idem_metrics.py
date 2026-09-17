@@ -5,7 +5,7 @@ Records idempotency check outcomes.
 Call after every key lookup, before returning to payment-switch.
 """
 
-from metrics.registry import (
+from shared.metrics.registry import (
     IDEMPOTENCY_CHECKS_TOTAL,
     IDEMPOTENCY_STALE_PROCESSING_TOTAL,
 )

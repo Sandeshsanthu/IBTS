@@ -8,7 +8,7 @@ import time
 import httpx
 import pybreaker
 
-from metrics.registry import (
+from shared.metrics.registry import (
     BANK_REQUESTS_TOTAL,
     BANK_REQUEST_LATENCY_SECONDS,
     BANK_FAILURES_TOTAL,

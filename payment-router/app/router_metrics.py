@@ -9,7 +9,7 @@ import time
 from collections import deque
 from threading import Lock
 
-from metrics.registry import (
+from shared.metrics.registry import (
     VPA_RESOLUTION_TOTAL,
     VPA_RESOLUTION_LATENCY_SECONDS,
     ROUTE_CACHE_OPS_TOTAL,
