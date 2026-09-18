@@ -22,6 +22,7 @@ alerting:
 
 scrape_configs:
   - job_name: api-gateway
+    honor_labels: true
     static_configs:
       - targets: ["api-gateway:8084"]
     relabel_configs:
@@ -29,6 +30,7 @@ scrape_configs:
         replacement: api-gateway
 
   - job_name: payment-switch
+    honor_labels: true
     static_configs:
       - targets: ["payment-switch:8083"]
     relabel_configs:
@@ -36,6 +38,7 @@ scrape_configs:
         replacement: payment-switch
 
   - job_name: payment-router
+    honor_labels: true
     static_configs:
       - targets: ["payment-router:8081"]
     relabel_configs:
@@ -43,6 +46,7 @@ scrape_configs:
         replacement: payment-router
 
   - job_name: idempotency-service
+    honor_labels: true
     static_configs:
       - targets: ["idempotency-guard:8080"]
     relabel_configs:
@@ -50,6 +54,7 @@ scrape_configs:
         replacement: idempotency-service
 
   - job_name: bank-adapter
+    honor_labels: true
     static_configs:
       - targets: ["bank-adapter:8082"]
     relabel_configs:
@@ -65,6 +70,7 @@ scrape_configs:
       - targets: ["localhost:9090"]
 
   - job_name: otel-exported-metrics
+    honor_labels: true
     static_configs:
       - targets: ["ibts-otel-collector:8888"]
     relabel_configs:
@@ -72,6 +78,7 @@ scrape_configs:
         replacement: otel-exported-metrics
 
   - job_name: otel-collector-telemetry
+    honor_labels: true
     static_configs:
       - targets: ["ibts-otel-collector:8889"]
     relabel_configs:

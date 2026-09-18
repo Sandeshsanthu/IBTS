@@ -6,16 +6,17 @@ import boto3
 import time
 import logging
 from typing import Optional
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# â”€â”€ Environment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Environment ────────────────────────────────────────────────────────────────
 _ENV      = os.getenv("ENV", "prod").lower()
 _IS_LOCAL = _ENV == "local"
 _MOCK     = "http://mock-bank-server:8080/mock"
 
-# â”€â”€ Seed data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Seed data ──────────────────────────────────────────────────────────────────
 _SEED_ROUTES_PROD = [
     ("SBI",      "State Bank of India",       "https://upi.sbi.co.in/txn",        "https://upi2.sbi.co.in/txn"),
     ("ICICI",    "ICICI Bank",                "https://upi.icicibank.com/txn",     "https://upi2.icicibank.com/txn"),
@@ -52,7 +53,6 @@ SEED_ROUTES = _SEED_ROUTES_LOCAL if _IS_LOCAL else _SEED_ROUTES_PROD
 logger.info("Routing seed mode: ENV=%s  routes=%d", _ENV, len(SEED_ROUTES))
 
 
-# â”€â”€ Repository â€” unchanged from here down â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class RoutingRepository:
 
     def __init__(self):
@@ -78,9 +78,8 @@ class RoutingRepository:
             self._table = self._client.Table(settings.routing_table_name)
             self._table.wait_until_exists()
             self._seed()
-
         except self._client.meta.client.exceptions.ResourceInUseException:
-            logger.info("Table already exists â€” skipping seed: %s", settings.routing_table_name)
+            logger.info("Table already exists — skipping seed: %s", settings.routing_table_name)
             self._table = self._client.Table(settings.routing_table_name)
             self._table.wait_until_exists()
 
@@ -97,6 +96,7 @@ class RoutingRepository:
         logger.info("Seeded %d routes", len(SEED_ROUTES))
 
     def find_by_bank_code(self, bank_code: str) -> Optional[dict]:
+        """Synchronous DynamoDB point read — cache is handled by RoutingService."""
         resp = self._table.get_item(Key={"bankCode": bank_code})
         item = resp.get("Item")
         if item and item.get("active"):
@@ -105,4 +105,3 @@ class RoutingRepository:
 
     def find_all(self) -> list[dict]:
         return self._table.scan().get("Items", [])
-

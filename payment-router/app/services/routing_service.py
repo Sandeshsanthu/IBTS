@@ -3,7 +3,9 @@
 
 import json
 import logging
+import time
 from decimal import Decimal
+
 from app.config import settings
 from app.models import RouteRequest, RouteResponse
 from app.resolvers.vpa_resolver import resolve_vpa
@@ -11,20 +13,68 @@ from app.resolvers.ifsc_resolver import resolve_ifsc
 from app.repository.routing_repository import RoutingRepository
 import redis as redis_lib
 
+from shared.metrics.registry import (
+    REDIS_OP_LATENCY_SECONDS,
+    REDIS_ERRORS_TOTAL,
+    ROUTE_CACHE_OPS_TOTAL,
+    ROUTE_CACHE_HIT_RATIO,
+)
+
 logger = logging.getLogger(__name__)
 
 CACHE_PREFIX = "route:"
 
+# Rolling in-process counters for hit ratio gauge (resets on restart)
+_cache_hits:   int = 0
+_cache_misses: int = 0
+
 
 class DecimalEncoder(json.JSONEncoder):
-    """boto3 DynamoDB resource returns Decimal â€” json.dumps needs this."""
+    """boto3 DynamoDB resource returns Decimal — json.dumps needs this."""
     def default(self, obj):
         if isinstance(obj, Decimal):
             return int(obj) if obj % 1 == 0 else float(obj)
         return super().default(obj)
 
 
+def _redis_call(redis: redis_lib.Redis, operation: str, func):
+    """Wrap a sync Redis call with latency + error metrics."""
+    start = time.perf_counter()
+    try:
+        return func()
+    except Exception as exc:
+        REDIS_ERRORS_TOTAL.labels(
+            service    = "payment-router",
+            error_type = type(exc).__name__,
+        ).inc()
+        raise
+    finally:
+        REDIS_OP_LATENCY_SECONDS.labels(
+            service   = "payment-router",
+            operation = operation,
+        ).observe(time.perf_counter() - start)
+
+
+def _update_hit_ratio(hit: bool, bank_code: str) -> None:
+    global _cache_hits, _cache_misses
+
+    op = "hit" if hit else "miss"
+    ROUTE_CACHE_OPS_TOTAL.labels(bank_code=bank_code, operation=op).inc()
+
+    if hit:
+        _cache_hits += 1
+    else:
+        _cache_misses += 1
+
+    total = _cache_hits + _cache_misses
+    if total > 0:
+        ROUTE_CACHE_HIT_RATIO.labels(service="payment-router").set(
+            _cache_hits / total
+        )
+
+
 class RoutingService:
+
     def __init__(self, repository: RoutingRepository, redis_client: redis_lib.Redis):
         self._repo  = repository
         self._redis = redis_client
@@ -35,49 +85,62 @@ class RoutingService:
 
         cache_key = f"{CACHE_PREFIX}{bank_code}"
 
-        # 1. Try Redis cache
-        cached = self._redis.get(cache_key)
+        # 1. Try Redis cache — instrumented
+        cached = _redis_call(self._redis, "GET", lambda: self._redis.get(cache_key))
         if cached:
-            ttl_ms = max(self._redis.pttl(cache_key), 0)
+            ttl_ms = max(
+                _redis_call(self._redis, "PTTL", lambda: self._redis.pttl(cache_key)),
+                0,
+            )
             logger.info("Cache HIT for bankCode=%s", bank_code)
+            _update_hit_ratio(hit=True, bank_code=bank_code)
             route = json.loads(cached)
             return self._build_response(route, "CACHE", ttl_ms)
 
-        # 2. Cache miss â€” read DynamoDB
-        logger.info("Cache MISS for bankCode=%s â€” reading DynamoDB", bank_code)
+        # 2. Cache miss — read DynamoDB
+        logger.info("Cache MISS for bankCode=%s — reading DynamoDB", bank_code)
+        _update_hit_ratio(hit=False, bank_code=bank_code)
+
         route = self._repo.find_by_bank_code(bank_code)
         if not route:
             from fastapi import HTTPException
-            raise HTTPException(status_code=404,
-                                detail=f"No active route for bankCode: {bank_code}")
-
-        # 3. Repopulate cache â€” DecimalEncoder handles boto3 Decimal types
-        try:
-            self._redis.setex(
-                cache_key,
-                settings.cache_ttl_seconds,
-                json.dumps(route, cls=DecimalEncoder)   # â† the fix
+            raise HTTPException(
+                status_code=404,
+                detail=f"No active route for bankCode: {bank_code}",
             )
+
+        # 3. Repopulate cache — instrumented
+        try:
+            _redis_call(
+                self._redis, "SETEX",
+                lambda: self._redis.setex(
+                    cache_key,
+                    settings.cache_ttl_seconds,
+                    json.dumps(route, cls=DecimalEncoder),
+                ),
+            )
+            ROUTE_CACHE_OPS_TOTAL.labels(
+                bank_code = bank_code,
+                operation = "set",
+            ).inc()
             logger.info("Cache WRITE for bankCode=%s TTL=%ds", bank_code, settings.cache_ttl_seconds)
         except Exception as e:
             logger.warning("Cache write failed for %s: %s", bank_code, e)
 
         return self._build_response(route, "DB", settings.cache_ttl_seconds * 1000)
 
-    # â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Helpers ────────────────────────────────────────────────────────────────
 
     def _extract_bank_code(self, request: RouteRequest) -> str:
         from fastapi import HTTPException
         if request.vpa:
             code = resolve_vpa(request.vpa)
             if not code:
-                raise HTTPException(status_code=404,
-                                    detail=f"Unknown VPA handle: {request.vpa}")
+                raise HTTPException(status_code=404, detail=f"Unknown VPA handle: {request.vpa}")
             return code
         code = resolve_ifsc(request.ifsc)
         if not code:
-            raise HTTPException(status_code=404,
-                                detail=f"Unknown IFSC prefix: {request.ifsc}")
+            raise HTTPException(status_code=404, detail=f"Unknown IFSC prefix: {request.ifsc}")
         return code
 
     def _build_response(self, route: dict, source: str, ttl_ms: int) -> RouteResponse:
@@ -89,4 +152,3 @@ class RoutingService:
             resolvedFrom     = source,
             ttlRemainingMs   = ttl_ms,
         )
-
