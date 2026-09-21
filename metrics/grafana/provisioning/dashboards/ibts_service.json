@@ -1,0 +1,350 @@
+{
+  "id": null,
+  "version": 1,
+  "timezone": "browser",
+  "editable": true,
+  "uid": "ibts-service",
+  "title": "IBTS - Service Health",
+  "tags": ["ibts", "service", "health"],
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "schemaVersion": 38,
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(ibts_http_requests_total, service)",
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Traffic",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Request Rate by Service",
+      "description": "HTTP requests per second per service",
+      "gridPos": { "x": 0, "y": 1, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [{
+        "expr": "sum by (service)(rate(ibts_http_requests_total{service=~\"$service\"}[1m]))",
+        "legendFormat": "{{ service }}"
+      }],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Error Rate by Service",
+      "description": "HTTP 4xx + 5xx per second per service",
+      "gridPos": { "x": 12, "y": 1, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "sum by (service)(rate(ibts_http_requests_total{service=~\"$service\", http_code=~\"4..\"}[1m]))",
+          "legendFormat": "{{ service }} 4xx"
+        },
+        {
+          "expr": "sum by (service)(rate(ibts_http_requests_total{service=~\"$service\", http_code=~\"5..\"}[1m]))",
+          "legendFormat": "{{ service }} 5xx"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": [{
+          "matcher": { "id": "byRegexp", "options": ".*5xx" },
+          "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+        }]
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Error Ratio by Service",
+      "description": "% of requests returning errors",
+      "gridPos": { "x": 0, "y": 9, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [{
+        "expr": "sum by (service)(rate(ibts_http_requests_total{service=~\"$service\", http_code=~\"[45]..\"}[1m])) / sum by (service)(rate(ibts_http_requests_total{service=~\"$service\"}[1m]))",
+        "legendFormat": "{{ service }}"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 0.01, "color": "yellow" },
+              { "value": 0.05, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Inflight Requests by Service",
+      "description": "Concurrent in-flight HTTP requests",
+      "gridPos": { "x": 12, "y": 9, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [{
+        "expr": "sum by (service)(ibts_http_requests_inflight{service=~\"$service\"})",
+        "legendFormat": "{{ service }}"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 50,   "color": "yellow" },
+              { "value": 100,  "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Latency",
+      "gridPos": { "x": 0, "y": 17, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "p50 Request Latency by Service",
+      "gridPos": { "x": 0, "y": 18, "w": 8, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [{
+        "expr": "histogram_quantile(0.50, sum by (le, service)(rate(ibts_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+        "legendFormat": "{{ service }} p50"
+      }],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "p95 Request Latency by Service",
+      "gridPos": { "x": 8, "y": 18, "w": 8, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum by (le, service)(rate(ibts_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+        "legendFormat": "{{ service }} p95"
+      }],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "p99 Request Latency by Service",
+      "gridPos": { "x": 16, "y": 18, "w": 8, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum by (le, service)(rate(ibts_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+        "legendFormat": "{{ service }} p99"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1,    "color": "yellow" },
+              { "value": 3,    "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Latency Heatmap View - All Percentiles",
+      "description": "p50 / p95 / p99 overlaid per service",
+      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, service)(rate(ibts_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+          "legendFormat": "{{ service }} p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, service)(rate(ibts_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+          "legendFormat": "{{ service }} p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, service)(rate(ibts_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+          "legendFormat": "{{ service }} p99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Infrastructure - Docker (EKS-ready)",
+      "gridPos": { "x": 0, "y": 34, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Container CPU Usage by Service",
+      "description": "Docker: cAdvisor. EKS: kubelet cadvisor endpoint. Label 'container' maps to service name.",
+      "gridPos": { "x": 0, "y": 35, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "sum by (container_label_com_docker_compose_service)(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service=~\"$service\", name!=\"\"}[1m]))",
+          "legendFormat": "{{ container_label_com_docker_compose_service }} (Docker)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": { "lineWidth": 2 }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Container Memory Usage by Service",
+      "description": "Working set memory. Docker: cAdvisor. EKS: same metric via kubelet.",
+      "gridPos": { "x": 12, "y": 35, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        {
+          "expr": "sum by (container_label_com_docker_compose_service)(container_memory_working_set_bytes{container_label_com_docker_compose_service=~\"$service\", name!=\"\"})",
+          "legendFormat": "{{ container_label_com_docker_compose_service }} (Docker)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "lineWidth": 2 }
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Running Containers / Pods",
+      "description": "Docker: distinct container names seen. EKS phase: swap expr to kube_pod_status_ready.",
+      "gridPos": { "x": 0, "y": 43, "w": 8, "h": 5 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "targets": [{
+        "expr": "count(count by (name)(container_last_seen{container_label_com_docker_compose_service=~\"$service\", name!=\"\"}))",
+        "legendFormat": "Containers"
+      }],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Container Restarts",
+      "description": "Docker: container start events. EKS phase: kube_pod_container_status_restarts_total.",
+      "gridPos": { "x": 8, "y": 43, "w": 8, "h": 5 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "thresholds": {
+          "steps": [
+            { "value": null, "color": "green" },
+            { "value": 1,    "color": "yellow" },
+            { "value": 5,    "color": "red" }
+          ]
+        }
+      },
+      "targets": [{
+        "expr": "sum(increase(container_start_time_seconds{container_label_com_docker_compose_service=~\"$service\", name!=\"\"}[1h]))",
+        "legendFormat": "Restarts (1h)"
+      }],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Network Rx / Tx",
+      "description": "Total bytes received and transmitted by service containers",
+      "gridPos": { "x": 16, "y": 43, "w": 8, "h": 5 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "expr": "sum(rate(container_network_receive_bytes_total{container_label_com_docker_compose_service=~\"$service\"}[1m]))",
+          "legendFormat": "Rx /s"
+        },
+        {
+          "expr": "sum(rate(container_network_transmit_bytes_total{container_label_com_docker_compose_service=~\"$service\"}[1m]))",
+          "legendFormat": "Tx /s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps" } }
+    },
+    {
+      "id": 17,
+      "type": "row",
+      "title": "EKS Phase - Placeholder Panels (no data until EKS)",
+      "gridPos": { "x": 0, "y": 48, "w": 24, "h": 1 },
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 18,
+          "type": "timeseries",
+          "title": "Pod Count by Service [EKS]",
+          "description": "Requires kube-state-metrics. Swap in when EKS is live.",
+          "gridPos": { "x": 0, "y": 49, "w": 8, "h": 8 },
+          "targets": [{
+            "expr": "sum by (label_app)(kube_pod_status_ready{condition=\"true\", label_app=~\"$service\"})",
+            "legendFormat": "{{ label_app }}"
+          }],
+          "fieldConfig": { "defaults": { "unit": "short" } }
+        },
+        {
+          "id": 19,
+          "type": "timeseries",
+          "title": "CPU Requests vs Limits [EKS]",
+          "description": "Requires kube-state-metrics.",
+          "gridPos": { "x": 8, "y": 49, "w": 8, "h": 8 },
+          "targets": [
+            { "expr": "sum by (pod)(kube_pod_container_resource_requests{resource=\"cpu\", container=~\"$service\"})", "legendFormat": "{{ pod }} request" },
+            { "expr": "sum by (pod)(kube_pod_container_resource_limits{resource=\"cpu\", container=~\"$service\"})",   "legendFormat": "{{ pod }} limit" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "cores" } }
+        },
+        {
+          "id": 20,
+          "type": "timeseries",
+          "title": "Memory Requests vs Limits [EKS]",
+          "description": "Requires kube-state-metrics.",
+          "gridPos": { "x": 16, "y": 49, "w": 8, "h": 8 },
+          "targets": [
+            { "expr": "sum by (pod)(kube_pod_container_resource_requests{resource=\"memory\", container=~\"$service\"})", "legendFormat": "{{ pod }} request" },
+            { "expr": "sum by (pod)(kube_pod_container_resource_limits{resource=\"memory\", container=~\"$service\"})",   "legendFormat": "{{ pod }} limit" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "bytes" } }
+        }
+      ]
+    }
+  ]
+}
