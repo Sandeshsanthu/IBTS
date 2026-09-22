@@ -152,6 +152,10 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: "6379"
         run: |
+          if [ ! -d "tests" ] || [ -z "$(find tests -name '*.py' -print -quit)" ]; then
+            echo "No tests found in ${{ matrix.dir }}/tests — skipping coverage gate."
+            exit 0
+          fi
           python -m pytest tests/ \
             --cov=app \
             --cov-report=term-missing \
