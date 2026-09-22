@@ -1,0 +1,277 @@
+﻿name: IBTS Build, Test, and Push
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "api-gateway/**"
+      - "bank-adapter/**"
+      - "payment-switch/**"
+      - "payment-router/**"
+      - "idempotency-guard/**"
+      - "shared/**"
+      - ".github/workflows/ibts-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ibts-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  REGISTRY_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+
+jobs:
+
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install ruff
+        run: pip install ruff==0.4.4
+      - name: Run ruff check
+        run: |
+          for dir in api-gateway/app bank-adapter/app payment-switch/app payment-router/app idempotency-guard/app shared; do
+            [ -d "$dir" ] && ruff check "$dir" --output-format=github --statistics || true
+          done
+      - name: Run ruff format check
+        run: |
+          for dir in api-gateway/app bank-adapter/app payment-switch/app payment-router/app idempotency-guard/app shared; do
+            [ -d "$dir" ] && ruff format "$dir" --check || true
+          done
+
+  sast:
+    name: SAST (Bandit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Bandit
+        run: pip install bandit[toml]
+      - name: Run Bandit
+        run: |
+          for dir in api-gateway/app bank-adapter/app payment-switch/app payment-router/app idempotency-guard/app shared; do
+            [ -d "$dir" ] && bandit -r "$dir" -ll --format json --output bandit-$(basename $dir).json || true
+          done
+      - name: Upload Bandit reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-reports
+          path: bandit-*.json
+          retention-days: 14
+
+  secret-scan:
+    name: Secret Scan (TruffleHog)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve base SHA
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "sha=${{ github.sha }}^" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ steps.base.outputs.sha }}
+          head: ${{ github.sha }}
+          extra_args: --only-verified
+        continue-on-error: true
+
+  unit-tests:
+    name: Unit Tests - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api-gateway
+            dir: api-gateway
+            reqs: api-gateway/requirements.txt
+          - service: bank-adapter
+            dir: bank-adapter
+            reqs: bank-adapter/requirements.txt
+          - service: payment-switch
+            dir: payment-switch
+            reqs: payment-switch/requirements.txt
+          - service: payment-router
+            dir: payment-router
+            reqs: payment-router/requirements.txt
+          - service: idempotency-guard
+            dir: idempotency-guard
+            reqs: idempotency-guard/requirements.txt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: ${{ matrix.reqs }}
+      - name: Install shared package
+        run: pip install -e shared/ --quiet
+      - name: Install service dependencies
+        working-directory: ${{ matrix.dir }}
+        run: |
+          python -m pip install --upgrade pip
+          [ -f requirements.txt ]     && pip install -r requirements.txt
+          [ -f requirements-dev.txt ] && pip install -r requirements-dev.txt
+          pip install pytest pytest-asyncio pytest-cov httpx anyio
+      - name: Run unit tests with coverage
+        working-directory: ${{ matrix.dir }}
+        env:
+          ENVIRONMENT: test
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: ap-south-1
+          DYNAMODB_ENDPOINT_URL: http://localhost:4566
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"
+        run: |
+          python -m pytest tests/ \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=80 \
+            --junit-xml=junit.xml \
+            -v
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ matrix.service }}
+          path: ${{ matrix.dir }}/coverage.xml
+          retention-days: 14
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-${{ matrix.service }}
+          path: ${{ matrix.dir }}/junit.xml
+          retention-days: 14
+
+  docker-build-push:
+    name: Docker - ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - unit-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api-gateway
+            file: api-gateway/Dockerfile
+          - service: bank-adapter
+            file: bank-adapter/Dockerfile
+          - service: payment-switch
+            file: payment-switch/Dockerfile
+          - service: payment-router
+            file: payment-router/Dockerfile
+          - service: idempotency-guard
+            file: idempotency-guard/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Dockerfile exists
+        id: df_check
+        run: |
+          if [ -f "${{ matrix.file }}" ]; then
+            echo "exists=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No Dockerfile at ${{ matrix.file }} - skipping."
+          fi
+      - name: Set up Docker Buildx
+        if: steps.df_check.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to Docker Hub
+        if: steps.df_check.outputs.exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push ${{ matrix.service }}
+        if: steps.df_check.outputs.exists == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file:    ${{ matrix.file }}
+          push:    true
+          tags: |
+            ${{ env.REGISTRY_USER }}/ibts-${{ matrix.service }}:latest
+            ${{ env.REGISTRY_USER }}/ibts-${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to:   type=gha,mode=max,scope=${{ matrix.service }}
+
+  update-k8s-manifests:
+    name: Update K8s Manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - docker-build-push
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Kustomize
+        uses: imranismail/setup-kustomize@v2
+        with:
+          kustomize-version: "5.4.1"
+      - name: Check Deployments folder exists
+        id: k8s_check
+        run: |
+          if [ -d "Deployments" ]; then
+            echo "exists=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No Deployments folder - skipping."
+          fi
+      - name: Update image tags
+        if: steps.k8s_check.outputs.exists == 'true'
+        run: |
+          cd Deployments
+          kustomize edit set image \
+            ${{ env.REGISTRY_USER }}/ibts-api-gateway=${{ env.REGISTRY_USER }}/ibts-api-gateway:${{ github.sha }} \
+            ${{ env.REGISTRY_USER }}/ibts-bank-adapter=${{ env.REGISTRY_USER }}/ibts-bank-adapter:${{ github.sha }} \
+            ${{ env.REGISTRY_USER }}/ibts-payment-switch=${{ env.REGISTRY_USER }}/ibts-payment-switch:${{ github.sha }} \
+            ${{ env.REGISTRY_USER }}/ibts-payment-router=${{ env.REGISTRY_USER }}/ibts-payment-router:${{ github.sha }} \
+            ${{ env.REGISTRY_USER }}/ibts-idempotency-guard=${{ env.REGISTRY_USER }}/ibts-idempotency-guard:${{ github.sha }}
+      - name: Commit and push manifest changes
+        if: steps.k8s_check.outputs.exists == 'true'
+        run: |
+          git config --global user.name  "GitOps Bot"
+          git config --global user.email "gitops-bot@github.com"
+          git add Deployments/kustomization.yaml
+          if git diff --staged --quiet; then
+            echo "No manifest changes to commit."
+          else
+            git commit -m "chore: deploy ibts ${GITHUB_SHA:0:7} [skip ci]"
+            git push
+          fi
