@@ -5,11 +5,11 @@ name: PR Checks
 
 on:
   push:
-    branches: [ main, develop ]      # ? fires on direct push to main/develop
+    branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
     types: [ opened, synchronize, reopened ]
-  workflow_dispatch:                 # ? manual trigger from GitHub UI
+  workflow_dispatch:
 
 concurrency:
   group: pr-checks-${{ github.ref }}-${{ github.event.pull_request.number || github.sha }}
@@ -19,6 +19,8 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
+
+  # ── 1. DETECT CHANGED SERVICES ────────────────────────────────────────────
   changes:
     name: Detect Changed Services
     runs-on: ubuntu-latest
@@ -49,8 +51,9 @@ jobs:
             shared:
               - 'shared/**'
 
+  # ── 2. LINT (ruff) — non-blocking ─────────────────────────────────────────
   lint:
-    name: Lint � ${{ matrix.service.name }}
+    name: Lint - ${{ matrix.service.name }}
     needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -96,8 +99,9 @@ jobs:
             --config ../config/ruff.toml \
             --check || true
 
+  # ── 3. SAST (Bandit) — non-blocking ───────────────────────────────────────
   sast:
-    name: SAST � ${{ matrix.service.name }}
+    name: SAST - ${{ matrix.service.name }}
     needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -142,8 +146,9 @@ jobs:
           path: ${{ matrix.service.name }}/bandit-report.json
           retention-days: 14
 
+  # ── 4. UNIT TESTS — blocking ───────────────────────────────────────────────
   unit-tests:
-    name: Tests � ${{ matrix.service.name }}
+    name: Tests - ${{ matrix.service.name }}
     needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -218,8 +223,9 @@ jobs:
           path: ${{ matrix.service.name }}/junit.xml
           retention-days: 14
 
+  # ── 5. DOCKER BUILD — blocking, no push on PR ─────────────────────────────
   build:
-    name: Docker Build � ${{ matrix.service }}
+    name: Docker Build - ${{ matrix.service }}
     needs: [ unit-tests ]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -243,7 +249,7 @@ jobs:
             echo "exists=true"  >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "??  No Dockerfile at ${{ matrix.service }}/Dockerfile � skipping."
+            echo "No Dockerfile at ${{ matrix.service }}/Dockerfile - skipping."
           fi
 
       - name: Set up Docker Buildx
@@ -261,6 +267,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to:   type=gha,mode=max,scope=${{ matrix.service }}
 
+  # ── 6. PR SUMMARY COMMENT ─────────────────────────────────────────────────
   pr-summary:
     name: PR Gate Summary
     needs: [ lint, sast, unit-tests, build ]
@@ -280,9 +287,9 @@ jobs:
             const build = '${{ needs.build.result }}';
 
             const e = r =>
-              r === 'success'  ? '?' :
-              r === 'skipped'  ? '??' :
-              r === 'failure'  ? '?' : '??';
+              r === 'success'  ? ':white_check_mark:' :
+              r === 'skipped'  ? ':next_track_button:' :
+              r === 'failure'  ? ':x:' : ':warning:';
 
             const nb = '*(non-blocking)*';
 
@@ -296,13 +303,13 @@ jobs:
               `| Tests (pytest + 80%) | ${e(tests)} \`${tests}\` | **Yes**   |`,
               `| Docker Build         | ${e(build)} \`${build}\` | **Yes**   |`,
               '',
-              '> ?? Coverage reports, JUnit XML and Bandit JSON uploaded as artifacts above.',
-              '> ?? Lint and SAST results are advisory � they do not block merge.',
+              '> Coverage reports, JUnit XML and Bandit JSON uploaded as artifacts above.',
+              '> Lint and SAST results are advisory - they do not block merge.',
             ].join('\n');
 
-            // -- on push events there is no PR � skip comment --------------
+            // push events have no PR number - skip comment gracefully
             if (!context.issue.number) {
-              console.log('Push event � no PR to comment on. Skipping summary comment.');
+              console.log('Push event - no PR to comment on. Skipping summary comment.');
               return;
             }
 
