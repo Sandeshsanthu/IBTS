@@ -31,14 +31,13 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from enum import IntEnum
-from typing import Callable, Optional
 
 from .registry import (
-    CIRCUIT_BREAKER_STATE,
     CIRCUIT_BREAKER_FAIL_COUNT,
-    CIRCUIT_BREAKER_TRANSITIONS_TOTAL,
     CIRCUIT_BREAKER_OPEN_DURATION_SECONDS,
     CIRCUIT_BREAKER_REJECTED_TOTAL,
+    CIRCUIT_BREAKER_STATE,
+    CIRCUIT_BREAKER_TRANSITIONS_TOTAL,
 )
 
 log = logging.getLogger(__name__)
@@ -97,7 +96,7 @@ class CircuitBreaker:
         self._state            = CBState.CLOSED
         self._fail_count       = 0
         self._half_open_ok     = 0
-        self._opened_at: Optional[float] = None   # perf_counter timestamp
+        self._opened_at: float | None = None   # perf_counter timestamp
         self._lock             = asyncio.Lock()
 
         # Initialise gauges so Prometheus shows 0 from startup

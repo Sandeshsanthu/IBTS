@@ -5,15 +5,14 @@ Records VPA resolution outcomes and maintains the rolling cache hit ratio.
 Call record_resolution() after every VPA lookup.
 """
 
-import time
 from collections import deque
 from threading import Lock
 
 from shared.metrics.registry import (
-    VPA_RESOLUTION_TOTAL,
-    VPA_RESOLUTION_LATENCY_SECONDS,
-    ROUTE_CACHE_OPS_TOTAL,
     ROUTE_CACHE_HIT_RATIO,
+    ROUTE_CACHE_OPS_TOTAL,
+    VPA_RESOLUTION_LATENCY_SECONDS,
+    VPA_RESOLUTION_TOTAL,
     VPA_UNKNOWN_TOTAL,
 )
 

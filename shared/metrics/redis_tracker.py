@@ -16,13 +16,14 @@ Usage:
 """
 
 import time
+
 import redis.asyncio as aioredis
 
 from .registry import (
-    REDIS_OP_LATENCY_SECONDS,
     REDIS_ERRORS_TOTAL,
-    ROUTE_CACHE_OPS_TOTAL,
+    REDIS_OP_LATENCY_SECONDS,
     ROUTE_CACHE_HIT_RATIO,
+    ROUTE_CACHE_OPS_TOTAL,
 )
 
 

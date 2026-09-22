@@ -2,9 +2,10 @@
 # filename: router.py
 
 import logging
-from fastapi import APIRouter, Header, Response
-from app.models import CheckRequest, CheckResponse, CompleteRequest
+
 from app import service, store
+from app.models import CheckRequest, CheckResponse, CompleteRequest
+from fastapi import APIRouter, Header, Response
 
 logger = logging.getLogger(__name__)
 

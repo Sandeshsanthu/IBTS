@@ -2,9 +2,10 @@
 # filename: app/proxy.py
 
 import logging
-from fastapi import Request, HTTPException
-from fastapi.responses import Response
+
 import httpx
+from fastapi import HTTPException, Request
+from fastapi.responses import Response
 
 log = logging.getLogger("api-gateway.proxy")
 

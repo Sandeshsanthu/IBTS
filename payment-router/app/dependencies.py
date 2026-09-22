@@ -2,10 +2,12 @@
 # filename: payment-router/app/dependencies.py
 
 from functools import lru_cache
+
 import redis
 from app.config import settings
 from app.repository.routing_repository import RoutingRepository
 from app.services.routing_service import RoutingService
+
 
 @lru_cache
 def get_repository() -> RoutingRepository:

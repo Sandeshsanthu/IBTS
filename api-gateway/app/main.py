@@ -9,20 +9,19 @@ from contextlib import asynccontextmanager
 
 import httpx
 import redis.asyncio as aioredis
+from app.auth import verify_auth
+from app.config import settings
+from app.proxy import proxy_request
+from app.rate_limiter import RateLimiter
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from prometheus_client import make_asgi_app
 from starlette.routing import Mount
 
-from app.auth import verify_auth
-from app.config import settings
-from app.proxy import proxy_request
-from app.rate_limiter import RateLimiter
 from shared.metrics.middleware import MetricsMiddleware
 from shared.metrics.redis_tracker import TrackedRedis
 from shared.telemetry import setup_telemetry
-
 
 setup_telemetry()
 HTTPXClientInstrumentor().instrument()

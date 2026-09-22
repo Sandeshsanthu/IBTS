@@ -5,7 +5,7 @@ Single source of truth for every Prometheus metric in IBTS.
 All five Python services import from here â€” no metric is defined twice.
 """
 
-from prometheus_client import Counter, Histogram, Gauge
+from prometheus_client import Counter, Gauge, Histogram
 
 # â”€â”€ Label name constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 L_SERVICE     = "service"        # api-gateway|payment-switch|payment-router|bank-adapter|idempotency

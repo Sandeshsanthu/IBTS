@@ -2,15 +2,14 @@
 # filename: payment-router/app/routers/payment_router.py
 
 import os
+
 import httpx
 import redis
-
+from app.models import RouteRequest
+from app.repository.routing_repository import RoutingRepository
+from app.services.routing_service import RoutingService
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-
-from app.services.routing_service  import RoutingService
-from app.repository.routing_repository import RoutingRepository
-from app.models import RouteRequest
 
 router = APIRouter(prefix="/api/v1/payment", tags=["payment"])
 
@@ -75,6 +74,6 @@ async def initiate(req: PaymentRequest):
         except httpx.HTTPError as e:
             raise HTTPException(
                 status_code=502,
-                detail=f"bank-adapter unreachable: {str(e)}"
+                detail=f"bank-adapter unreachable: {e!s}"
             )
 

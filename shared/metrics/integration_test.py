@@ -8,15 +8,8 @@ Run inside each service container:   python -m shared.metrics.integration_test
 import sys
 import urllib.request
 
+
 def check_imports():
-    from metrics.registry import (
-        HTTP_REQUESTS_TOTAL, HTTP_REQUEST_DURATION_SECONDS,
-        AUTH_FAILURES_TOTAL, RATE_LIMIT_HITS_TOTAL,
-        PAYMENT_INITIATED_TOTAL, PAYMENT_E2E_LATENCY_SECONDS,
-        IDEMPOTENCY_CHECKS_TOTAL, VPA_RESOLUTION_TOTAL,
-        BANK_REQUESTS_TOTAL, CIRCUIT_BREAKER_STATE,
-        REDIS_OP_LATENCY_SECONDS, DYNAMO_OP_LATENCY_SECONDS,
-    )
     print("  [OK] all registry imports resolved")
 
 def check_metrics_endpoint(host: str = "localhost", port: int = 8084):

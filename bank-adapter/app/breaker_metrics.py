@@ -5,14 +5,14 @@ pybreaker listener that emits circuit breaker metrics on every state change.
 """
 
 import time
+
 import pybreaker
 
-from shared.metrics.registry import (          # ← fixed: metrics → shared.metrics
-    CIRCUIT_BREAKER_STATE,
+from shared.metrics.registry import (  # ← fixed: metrics → shared.metrics
     CIRCUIT_BREAKER_FAIL_COUNT,
-    CIRCUIT_BREAKER_TRANSITIONS_TOTAL,
     CIRCUIT_BREAKER_OPEN_DURATION_SECONDS,
-    CIRCUIT_BREAKER_REJECTED_TOTAL,
+    CIRCUIT_BREAKER_STATE,
+    CIRCUIT_BREAKER_TRANSITIONS_TOTAL,
 )
 
 _STATE_INT   = {"closed": 0, "open": 1, "half_open": 2}

@@ -20,21 +20,20 @@ Public API
 
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
 
-from shared.metrics.registry import (          # ← correct folder name
-    PAYMENT_INITIATED_TOTAL,
-    PAYMENT_AMOUNT_PAISE,
-    PAYMENT_TOTAL_AMOUNT_PAISE,
-    PAYMENT_E2E_LATENCY_SECONDS,
-    PAYMENT_ERRORS_TOTAL,
-    PAYMENT_STATE_CORRUPTION_TOTAL,
-    DUPLICATE_DEBIT_TOTAL,
-    IDEMPOTENCY_CHECKS_TOTAL,
-    BANK_REQUESTS_TOTAL,
-    BANK_REQUEST_LATENCY_SECONDS,
+from shared.metrics.registry import (  # ← correct folder name
     BANK_FAILURES_TOTAL,
     BANK_FALLBACK_USED_TOTAL,
+    BANK_REQUEST_LATENCY_SECONDS,
+    BANK_REQUESTS_TOTAL,
+    DUPLICATE_DEBIT_TOTAL,
+    IDEMPOTENCY_CHECKS_TOTAL,
+    PAYMENT_AMOUNT_PAISE,
+    PAYMENT_E2E_LATENCY_SECONDS,
+    PAYMENT_ERRORS_TOTAL,
+    PAYMENT_INITIATED_TOTAL,
+    PAYMENT_STATE_CORRUPTION_TOTAL,
+    PAYMENT_TOTAL_AMOUNT_PAISE,
 )
 
 # ── VPA handle → bank code mapping ────────────────────────────────────────────
@@ -88,7 +87,7 @@ def record_bank_request(
     http_code:     str,          # "200" | "500" | "timeout" etc.
     duration_s:    float,
     failed:        bool = False,
-    fail_type:     Optional[str] = None,   # http_error|timeout|connection|both_failed
+    fail_type:     str | None = None,   # http_error|timeout|connection|both_failed
     fallback_used: bool = False,
 ) -> None:
     """
@@ -125,7 +124,7 @@ def record_payment(
     amount_paise: int,
     status:       str,                    # SUCCESS | FAILED | UNKNOWN
     idem_result:  str,                    # NEW | CACHED | STALE_PROCESSING
-    error_kind:   Optional[str] = None,   # validation|routing|bank_error|timeout|unknown
+    error_kind:   str | None = None,   # validation|routing|bank_error|timeout|unknown
     duration_s:   float = 0.0,
 ) -> None:
     """
@@ -229,7 +228,7 @@ async def payment_timer(
 
     class _Ctx:
         status:    str           = "FAILED"
-        error_kind: Optional[str] = "unknown"
+        error_kind: str | None = "unknown"
         bank_code: str           = "UNKNOWN"   # enriched after VPA resolution
 
     ctx   = _Ctx()

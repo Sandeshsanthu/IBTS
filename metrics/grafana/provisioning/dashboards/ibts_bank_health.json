@@ -34,399 +34,44 @@
     ]
   },
   "panels": [
+    { "id": 1, "type": "stat", "title": "HDFC - Success %", "gridPos": { "x": 0, "y": 0, "w": 3, "h": 4 }, "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area", "thresholds": { "steps": [ { "value": null, "color": "red" }, { "value": 0.95, "color": "yellow" }, { "value": 0.99, "color": "green" } ] } }, "targets": [{ "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\", payee_bank=\"HDFC\"}[5m])) / sum(rate(ibts_payment_initiated_total{payee_bank=\"HDFC\"}[5m]))", "legendFormat": "HDFC" }], "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } } },
+    { "id": 2, "type": "stat", "title": "ICICI - Success %", "gridPos": { "x": 3, "y": 0, "w": 3, "h": 4 }, "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area", "thresholds": { "steps": [ { "value": null, "color": "red" }, { "value": 0.95, "color": "yellow" }, { "value": 0.99, "color": "green" } ] } }, "targets": [{ "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\", payee_bank=\"ICICI\"}[5m])) / sum(rate(ibts_payment_initiated_total{payee_bank=\"ICICI\"}[5m]))", "legendFormat": "ICICI" }], "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } } },
+    { "id": 3, "type": "stat", "title": "SBI - Success %", "gridPos": { "x": 6, "y": 0, "w": 3, "h": 4 }, "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area", "thresholds": { "steps": [ { "value": null, "color": "red" }, { "value": 0.95, "color": "yellow" }, { "value": 0.99, "color": "green" } ] } }, "targets": [{ "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\", payee_bank=\"SBI\"}[5m])) / sum(rate(ibts_payment_initiated_total{payee_bank=\"SBI\"}[5m]))", "legendFormat": "SBI" }], "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } } },
+    { "id": 4, "type": "stat", "title": "YESBANK - Success %", "gridPos": { "x": 9, "y": 0, "w": 3, "h": 4 }, "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area", "thresholds": { "steps": [ { "value": null, "color": "red" }, { "value": 0.95, "color": "yellow" }, { "value": 0.99, "color": "green" } ] } }, "targets": [{ "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\", payee_bank=\"YESBANK\"}[5m])) / sum(rate(ibts_payment_initiated_total{payee_bank=\"YESBANK\"}[5m]))", "legendFormat": "YESBANK" }], "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } } },
+    { "id": 5, "type": "stat", "title": "HDFC - p99 Latency", "gridPos": { "x": 12, "y": 0, "w": 3, "h": 4 }, "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "thresholds": { "steps": [ { "value": null, "color": "green" }, { "value": 1, "color": "yellow" }, { "value": 3, "color": "red" } ] } }, "targets": [{ "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"HDFC\"}[5m])))", "legendFormat": "HDFC p99" }], "fieldConfig": { "defaults": { "unit": "s" } } },
+    { "id": 6, "type": "stat", "title": "ICICI - p99 Latency", "gridPos": { "x": 15, "y": 0, "w": 3, "h": 4 }, "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "thresholds": { "steps": [ { "value": null, "color": "green" }, { "value": 1, "color": "yellow" }, { "value": 3, "color": "red" } ] } }, "targets": [{ "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"ICICI\"}[5m])))", "legendFormat": "ICICI p99" }], "fieldConfig": { "defaults": { "unit": "s" } } },
+    { "id": 7, "type": "stat", "title": "SBI - p99 Latency", "gridPos": { "x": 18, "y": 0, "w": 3, "h": 4 }, "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "thresholds": { "steps": [ { "value": null, "color": "green" }, { "value": 1, "color": "yellow" }, { "value": 3, "color": "red" } ] } }, "targets": [{ "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"SBI\"}[5m])))", "legendFormat": "SBI p99" }], "fieldConfig": { "defaults": { "unit": "s" } } },
+    { "id": 8, "type": "stat", "title": "YESBANK - p99 Latency", "gridPos": { "x": 21, "y": 0, "w": 3, "h": 4 }, "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "thresholds": { "steps": [ { "value": null, "color": "green" }, { "value": 1, "color": "yellow" }, { "value": 3, "color": "red" } ] } }, "targets": [{ "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"YESBANK\"}[5m])))", "legendFormat": "YESBANK p99" }], "fieldConfig": { "defaults": { "unit": "s" } } },
 
-    // ── TOP SUMMARY ROW ──────────────────────────────────────────────────────
+    { "id": 100, "type": "row", "title": "HDFC", "gridPos": { "x": 0, "y": 4, "w": 24, "h": 1 }, "collapsed": false },
+    { "id": 101, "type": "timeseries", "title": "HDFC - Latency p50 / p95 / p99", "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "histogram_quantile(0.50, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"HDFC\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p50 {{ endpoint_type }}" }, { "expr": "histogram_quantile(0.95, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"HDFC\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p95 {{ endpoint_type }}" }, { "expr": "histogram_quantile(0.99, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"HDFC\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p99 {{ endpoint_type }}" } ], "fieldConfig": { "defaults": { "unit": "s" } } },
+    { "id": 102, "type": "timeseries", "title": "HDFC - Error Rate by Type", "gridPos": { "x": 12, "y": 5, "w": 6, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "sum by (failure_type)(rate(ibts_bank_failures_total{bank_code=\"HDFC\"}[1m]))", "legendFormat": "{{ failure_type }}" } ], "fieldConfig": { "defaults": { "unit": "reqps" } } },
+    { "id": 103, "type": "timeseries", "title": "HDFC - Timeout Rate", "gridPos": { "x": 18, "y": 5, "w": 6, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "sum(rate(ibts_bank_failures_total{bank_code=\"HDFC\", failure_type=\"timeout\"}[1m]))", "legendFormat": "timeout/s" } ], "fieldConfig": { "defaults": { "unit": "reqps" } } },
 
-    {
-      "id": 1,
-      "type": "stat",
-      "title": "HDFC - Success %",
-      "gridPos": { "x": 0, "y": 0, "w": 3, "h": 4 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "colorMode": "background",
-        "graphMode": "area",
-        "thresholds": {
-          "steps": [
-            { "value": null,  "color": "red" },
-            { "value": 0.95,  "color": "yellow" },
-            { "value": 0.99,  "color": "green" }
-          ]
-        }
-      },
-      "targets": [{
-        "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\", payee_bank=\"HDFC\"}[5m])) / sum(rate(ibts_payment_initiated_total{payee_bank=\"HDFC\"}[5m]))",
-        "legendFormat": "HDFC"
-      }],
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
-    },
-    {
-      "id": 2,
-      "type": "stat",
-      "title": "ICICI - Success %",
-      "gridPos": { "x": 3, "y": 0, "w": 3, "h": 4 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "colorMode": "background",
-        "graphMode": "area",
-        "thresholds": {
-          "steps": [
-            { "value": null,  "color": "red" },
-            { "value": 0.95,  "color": "yellow" },
-            { "value": 0.99,  "color": "green" }
-          ]
-        }
-      },
-      "targets": [{
-        "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\", payee_bank=\"ICICI\"}[5m])) / sum(rate(ibts_payment_initiated_total{payee_bank=\"ICICI\"}[5m]))",
-        "legendFormat": "ICICI"
-      }],
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
-    },
-    {
-      "id": 3,
-      "type": "stat",
-      "title": "SBI - Success %",
-      "gridPos": { "x": 6, "y": 0, "w": 3, "h": 4 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "colorMode": "background",
-        "graphMode": "area",
-        "thresholds": {
-          "steps": [
-            { "value": null,  "color": "red" },
-            { "value": 0.95,  "color": "yellow" },
-            { "value": 0.99,  "color": "green" }
-          ]
-        }
-      },
-      "targets": [{
-        "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\", payee_bank=\"SBI\"}[5m])) / sum(rate(ibts_payment_initiated_total{payee_bank=\"SBI\"}[5m]))",
-        "legendFormat": "SBI"
-      }],
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
-    },
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "YESBANK - Success %",
-      "gridPos": { "x": 9, "y": 0, "w": 3, "h": 4 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "colorMode": "background",
-        "graphMode": "area",
-        "thresholds": {
-          "steps": [
-            { "value": null,  "color": "red" },
-            { "value": 0.95,  "color": "yellow" },
-            { "value": 0.99,  "color": "green" }
-          ]
-        }
-      },
-      "targets": [{
-        "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\", payee_bank=\"YESBANK\"}[5m])) / sum(rate(ibts_payment_initiated_total{payee_bank=\"YESBANK\"}[5m]))",
-        "legendFormat": "YESBANK"
-      }],
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
-    },
-    {
-      "id": 5,
-      "type": "stat",
-      "title": "HDFC - p99 Latency",
-      "gridPos": { "x": 12, "y": 0, "w": 3, "h": 4 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "colorMode": "background",
-        "thresholds": {
-          "steps": [
-            { "value": null, "color": "green" },
-            { "value": 1,    "color": "yellow" },
-            { "value": 3,    "color": "red" }
-          ]
-        }
-      },
-      "targets": [{
-        "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"HDFC\"}[5m])))",
-        "legendFormat": "HDFC p99"
-      }],
-      "fieldConfig": { "defaults": { "unit": "s" } }
-    },
-    {
-      "id": 6,
-      "type": "stat",
-      "title": "ICICI - p99 Latency",
-      "gridPos": { "x": 15, "y": 0, "w": 3, "h": 4 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "colorMode": "background",
-        "thresholds": {
-          "steps": [
-            { "value": null, "color": "green" },
-            { "value": 1,    "color": "yellow" },
-            { "value": 3,    "color": "red" }
-          ]
-        }
-      },
-      "targets": [{
-        "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"ICICI\"}[5m])))",
-        "legendFormat": "ICICI p99"
-      }],
-      "fieldConfig": { "defaults": { "unit": "s" } }
-    },
-    {
-      "id": 7,
-      "type": "stat",
-      "title": "SBI - p99 Latency",
-      "gridPos": { "x": 18, "y": 0, "w": 3, "h": 4 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "colorMode": "background",
-        "thresholds": {
-          "steps": [
-            { "value": null, "color": "green" },
-            { "value": 1,    "color": "yellow" },
-            { "value": 3,    "color": "red" }
-          ]
-        }
-      },
-      "targets": [{
-        "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"SBI\"}[5m])))",
-        "legendFormat": "SBI p99"
-      }],
-      "fieldConfig": { "defaults": { "unit": "s" } }
-    },
-    {
-      "id": 8,
-      "type": "stat",
-      "title": "YESBANK - p99 Latency",
-      "gridPos": { "x": 21, "y": 0, "w": 3, "h": 4 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "colorMode": "background",
-        "thresholds": {
-          "steps": [
-            { "value": null, "color": "green" },
-            { "value": 1,    "color": "yellow" },
-            { "value": 3,    "color": "red" }
-          ]
-        }
-      },
-      "targets": [{
-        "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"YESBANK\"}[5m])))",
-        "legendFormat": "YESBANK p99"
-      }],
-      "fieldConfig": { "defaults": { "unit": "s" } }
-    },
+    { "id": 200, "type": "row", "title": "ICICI", "gridPos": { "x": 0, "y": 13, "w": 24, "h": 1 }, "collapsed": false },
+    { "id": 201, "type": "timeseries", "title": "ICICI - Latency p50 / p95 / p99", "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "histogram_quantile(0.50, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"ICICI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p50 {{ endpoint_type }}" }, { "expr": "histogram_quantile(0.95, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"ICICI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p95 {{ endpoint_type }}" }, { "expr": "histogram_quantile(0.99, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"ICICI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p99 {{ endpoint_type }}" } ], "fieldConfig": { "defaults": { "unit": "s" } } },
+    { "id": 202, "type": "timeseries", "title": "ICICI - Error Rate by Type", "gridPos": { "x": 12, "y": 14, "w": 6, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "sum by (failure_type)(rate(ibts_bank_failures_total{bank_code=\"ICICI\"}[1m]))", "legendFormat": "{{ failure_type }}" } ], "fieldConfig": { "defaults": { "unit": "reqps" } } },
+    { "id": 203, "type": "timeseries", "title": "ICICI - Timeout Rate", "gridPos": { "x": 18, "y": 14, "w": 6, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "sum(rate(ibts_bank_failures_total{bank_code=\"ICICI\", failure_type=\"timeout\"}[1m]))", "legendFormat": "timeout/s" } ], "fieldConfig": { "defaults": { "unit": "reqps" } } },
 
-    // ── HDFC ROW ─────────────────────────────────────────────────────────────
+    { "id": 300, "type": "row", "title": "SBI", "gridPos": { "x": 0, "y": 22, "w": 24, "h": 1 }, "collapsed": false },
+    { "id": 301, "type": "timeseries", "title": "SBI - Latency p50 / p95 / p99", "gridPos": { "x": 0, "y": 23, "w": 12, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "histogram_quantile(0.50, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"SBI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p50 {{ endpoint_type }}" }, { "expr": "histogram_quantile(0.95, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"SBI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p95 {{ endpoint_type }}" }, { "expr": "histogram_quantile(0.99, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"SBI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p99 {{ endpoint_type }}" } ], "fieldConfig": { "defaults": { "unit": "s" } } },
+    { "id": 302, "type": "timeseries", "title": "SBI - Error Rate by Type", "gridPos": { "x": 12, "y": 23, "w": 6, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "sum by (failure_type)(rate(ibts_bank_failures_total{bank_code=\"SBI\"}[1m]))", "legendFormat": "{{ failure_type }}" } ], "fieldConfig": { "defaults": { "unit": "reqps" } } },
+    { "id": 303, "type": "timeseries", "title": "SBI - Timeout Rate", "gridPos": { "x": 18, "y": 23, "w": 6, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "sum(rate(ibts_bank_failures_total{bank_code=\"SBI\", failure_type=\"timeout\"}[1m]))", "legendFormat": "timeout/s" } ], "fieldConfig": { "defaults": { "unit": "reqps" } } },
 
-    { "id": 100, "type": "row", "title": "🏦 HDFC", "gridPos": { "x": 0, "y": 4, "w": 24, "h": 1 }, "collapsed": false },
-    {
-      "id": 101,
-      "type": "timeseries",
-      "title": "HDFC - Request Latency (p50 / p95 / p99)",
-      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "histogram_quantile(0.50, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"HDFC\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p50 {{ endpoint_type }}" },
-        { "expr": "histogram_quantile(0.95, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"HDFC\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p95 {{ endpoint_type }}" },
-        { "expr": "histogram_quantile(0.99, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"HDFC\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p99 {{ endpoint_type }}" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
-    },
-    {
-      "id": 102,
-      "type": "timeseries",
-      "title": "HDFC - Error Rate",
-      "gridPos": { "x": 12, "y": 5, "w": 6, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "sum by (failure_type)(rate(ibts_bank_failures_total{bank_code=\"HDFC\"}[1m]))", "legendFormat": "{{ failure_type }}" }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "thresholds": { "steps": [ { "value": null, "color": "green" }, { "value": 0.1, "color": "red" } ] }
-        }
-      }
-    },
-    {
-      "id": 103,
-      "type": "timeseries",
-      "title": "HDFC - Timeout Rate",
-      "gridPos": { "x": 18, "y": 5, "w": 6, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "sum(rate(ibts_bank_failures_total{bank_code=\"HDFC\", failure_type=\"timeout\"}[1m]))", "legendFormat": "timeout/s" }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "thresholds": { "steps": [ { "value": null, "color": "green" }, { "value": 0.05, "color": "red" } ] }
-        }
-      }
-    },
+    { "id": 400, "type": "row", "title": "YESBANK", "gridPos": { "x": 0, "y": 31, "w": 24, "h": 1 }, "collapsed": false },
+    { "id": 401, "type": "timeseries", "title": "YESBANK - Latency p50 / p95 / p99", "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "histogram_quantile(0.50, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"YESBANK\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p50 {{ endpoint_type }}" }, { "expr": "histogram_quantile(0.95, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"YESBANK\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p95 {{ endpoint_type }}" }, { "expr": "histogram_quantile(0.99, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"YESBANK\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p99 {{ endpoint_type }}" } ], "fieldConfig": { "defaults": { "unit": "s" } } },
+    { "id": 402, "type": "timeseries", "title": "YESBANK - Error Rate by Type", "gridPos": { "x": 12, "y": 32, "w": 6, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "sum by (failure_type)(rate(ibts_bank_failures_total{bank_code=\"YESBANK\"}[1m]))", "legendFormat": "{{ failure_type }}" } ], "fieldConfig": { "defaults": { "unit": "reqps" } } },
+    { "id": 403, "type": "timeseries", "title": "YESBANK - Timeout Rate", "gridPos": { "x": 18, "y": 32, "w": 6, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "sum(rate(ibts_bank_failures_total{bank_code=\"YESBANK\", failure_type=\"timeout\"}[1m]))", "legendFormat": "timeout/s" } ], "fieldConfig": { "defaults": { "unit": "reqps" } } },
 
-    // ── ICICI ROW ────────────────────────────────────────────────────────────
-
-    { "id": 200, "type": "row", "title": "🏦 ICICI", "gridPos": { "x": 0, "y": 13, "w": 24, "h": 1 }, "collapsed": false },
-    {
-      "id": 201,
-      "type": "timeseries",
-      "title": "ICICI - Request Latency (p50 / p95 / p99)",
-      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "histogram_quantile(0.50, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"ICICI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p50 {{ endpoint_type }}" },
-        { "expr": "histogram_quantile(0.95, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"ICICI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p95 {{ endpoint_type }}" },
-        { "expr": "histogram_quantile(0.99, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"ICICI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p99 {{ endpoint_type }}" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
-    },
-    {
-      "id": 202,
-      "type": "timeseries",
-      "title": "ICICI - Error Rate",
-      "gridPos": { "x": 12, "y": 14, "w": 6, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "sum by (failure_type)(rate(ibts_bank_failures_total{bank_code=\"ICICI\"}[1m]))", "legendFormat": "{{ failure_type }}" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "reqps" } }
-    },
-    {
-      "id": 203,
-      "type": "timeseries",
-      "title": "ICICI - Timeout Rate",
-      "gridPos": { "x": 18, "y": 14, "w": 6, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "sum(rate(ibts_bank_failures_total{bank_code=\"ICICI\", failure_type=\"timeout\"}[1m]))", "legendFormat": "timeout/s" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "reqps" } }
-    },
-
-    // ── SBI ROW ──────────────────────────────────────────────────────────────
-
-    { "id": 300, "type": "row", "title": "🏦 SBI", "gridPos": { "x": 0, "y": 22, "w": 24, "h": 1 }, "collapsed": false },
-    {
-      "id": 301,
-      "type": "timeseries",
-      "title": "SBI - Request Latency (p50 / p95 / p99)",
-      "gridPos": { "x": 0, "y": 23, "w": 12, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "histogram_quantile(0.50, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"SBI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p50 {{ endpoint_type }}" },
-        { "expr": "histogram_quantile(0.95, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"SBI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p95 {{ endpoint_type }}" },
-        { "expr": "histogram_quantile(0.99, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"SBI\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p99 {{ endpoint_type }}" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
-    },
-    {
-      "id": 302,
-      "type": "timeseries",
-      "title": "SBI - Error Rate",
-      "gridPos": { "x": 12, "y": 23, "w": 6, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "sum by (failure_type)(rate(ibts_bank_failures_total{bank_code=\"SBI\"}[1m]))", "legendFormat": "{{ failure_type }}" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "reqps" } }
-    },
-    {
-      "id": 303,
-      "type": "timeseries",
-      "title": "SBI - Timeout Rate",
-      "gridPos": { "x": 18, "y": 23, "w": 6, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "sum(rate(ibts_bank_failures_total{bank_code=\"SBI\", failure_type=\"timeout\"}[1m]))", "legendFormat": "timeout/s" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "reqps" } }
-    },
-
-    // ── YESBANK ROW ──────────────────────────────────────────────────────────
-
-    { "id": 400, "type": "row", "title": "🏦 YESBANK", "gridPos": { "x": 0, "y": 31, "w": 24, "h": 1 }, "collapsed": false },
-    {
-      "id": 401,
-      "type": "timeseries",
-      "title": "YESBANK - Request Latency (p50 / p95 / p99)",
-      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "histogram_quantile(0.50, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"YESBANK\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p50 {{ endpoint_type }}" },
-        { "expr": "histogram_quantile(0.95, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"YESBANK\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p95 {{ endpoint_type }}" },
-        { "expr": "histogram_quantile(0.99, sum by (le, endpoint_type)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"YESBANK\", endpoint_type=~\"$endpoint_type\"}[5m])))", "legendFormat": "p99 {{ endpoint_type }}" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
-    },
-    {
-      "id": 402,
-      "type": "timeseries",
-      "title": "YESBANK - Error Rate",
-      "gridPos": { "x": 12, "y": 32, "w": 6, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "sum by (failure_type)(rate(ibts_bank_failures_total{bank_code=\"YESBANK\"}[1m]))", "legendFormat": "{{ failure_type }}" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "reqps" } }
-    },
-    {
-      "id": 403,
-      "type": "timeseries",
-      "title": "YESBANK - Timeout Rate",
-      "gridPos": { "x": 18, "y": 32, "w": 6, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "sum(rate(ibts_bank_failures_total{bank_code=\"YESBANK\", failure_type=\"timeout\"}[1m]))", "legendFormat": "timeout/s" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "reqps" } }
-    },
-
-    // ── CROSS-BANK COMPARISON ROW ─────────────────────────────────────────────
-
-    { "id": 500, "type": "row", "title": "📊 Cross-Bank Comparison", "gridPos": { "x": 0, "y": 40, "w": 24, "h": 1 }, "collapsed": false },
-    {
-      "id": 501,
-      "type": "timeseries",
-      "title": "All Banks - p99 Latency Comparison",
-      "gridPos": { "x": 0, "y": 41, "w": 12, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "histogram_quantile(0.99, sum by (le, bank_code)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=~\"$bank\"}[5m])))", "legendFormat": "{{ bank_code }}" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
-    },
-    {
-      "id": 502,
-      "type": "timeseries",
-      "title": "All Banks - Error Rate Comparison",
-      "gridPos": { "x": 12, "y": 41, "w": 12, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "sum by (bank_code)(rate(ibts_bank_failures_total{bank_code=~\"$bank\"}[1m]))", "legendFormat": "{{ bank_code }}" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "reqps" } }
-    },
+    { "id": 500, "type": "row", "title": "Cross-Bank Comparison", "gridPos": { "x": 0, "y": 40, "w": 24, "h": 1 }, "collapsed": false },
+    { "id": 501, "type": "timeseries", "title": "All Banks - p99 Latency Comparison", "gridPos": { "x": 0, "y": 41, "w": 12, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "histogram_quantile(0.99, sum by (le, bank_code)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=~\"$bank\"}[5m])))", "legendFormat": "{{ bank_code }}" } ], "fieldConfig": { "defaults": { "unit": "s" } } },
+    { "id": 502, "type": "timeseries", "title": "All Banks - Error Rate Comparison", "gridPos": { "x": 12, "y": 41, "w": 12, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "sum by (bank_code)(rate(ibts_bank_failures_total{bank_code=~\"$bank\"}[1m]))", "legendFormat": "{{ bank_code }}" } ], "fieldConfig": { "defaults": { "unit": "reqps" } } },
     {
       "id": 503,
       "type": "bargauge",
       "title": "All Banks - Success % Ranking",
-      "description": "Higher is better — red means SLA breach",
       "gridPos": { "x": 0, "y": 49, "w": 12, "h": 8 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "thresholds": {
-          "steps": [
-            { "value": null, "color": "red" },
-            { "value": 0.95, "color": "yellow" },
-            { "value": 0.99, "color": "green" }
-          ]
-        }
-      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "thresholds": { "steps": [ { "value": null, "color": "red" }, { "value": 0.95, "color": "yellow" }, { "value": 0.99, "color": "green" } ] } },
       "targets": [
         { "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\", payee_bank=\"HDFC\"}[5m])) / sum(rate(ibts_payment_initiated_total{payee_bank=\"HDFC\"}[5m]))", "legendFormat": "HDFC" },
         { "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\", payee_bank=\"ICICI\"}[5m])) / sum(rate(ibts_payment_initiated_total{payee_bank=\"ICICI\"}[5m]))", "legendFormat": "ICICI" },
@@ -439,20 +84,8 @@
       "id": 504,
       "type": "bargauge",
       "title": "All Banks - p99 Latency Ranking",
-      "description": "Lower is better — red means SLA breach",
       "gridPos": { "x": 12, "y": 49, "w": 12, "h": 8 },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "thresholds": {
-          "steps": [
-            { "value": null, "color": "green" },
-            { "value": 1,    "color": "yellow" },
-            { "value": 3,    "color": "red" }
-          ]
-        }
-      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient", "thresholds": { "steps": [ { "value": null, "color": "green" }, { "value": 1, "color": "yellow" }, { "value": 3, "color": "red" } ] } },
       "targets": [
         { "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"HDFC\"}[5m])))", "legendFormat": "HDFC" },
         { "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_bank_request_latency_seconds_bucket{bank_code=\"ICICI\"}[5m])))", "legendFormat": "ICICI" },
@@ -461,34 +94,7 @@
       ],
       "fieldConfig": { "defaults": { "unit": "s" } }
     },
-    {
-      "id": 505,
-      "type": "timeseries",
-      "title": "All Banks - Circuit Breaker State",
-      "description": "0=closed 1=open 2=half-open",
-      "gridPos": { "x": 0, "y": 57, "w": 12, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "ibts_circuit_breaker_state{bank_code=~\"$bank\"}", "legendFormat": "{{ bank_code }}" }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short", "min": 0, "max": 2,
-          "thresholds": { "steps": [ { "value": null, "color": "green" }, { "value": 1, "color": "red" } ] }
-        }
-      }
-    },
-    {
-      "id": 506,
-      "type": "timeseries",
-      "title": "All Banks - Fallback Usage Rate",
-      "description": "How often primary fails and fallback is used",
-      "gridPos": { "x": 12, "y": 57, "w": 12, "h": 8 },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
-      "targets": [
-        { "expr": "sum by (bank_code)(rate(ibts_bank_fallback_used_total{bank_code=~\"$bank\"}[1m]))", "legendFormat": "{{ bank_code }}" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "reqps" } }
-    }
+    { "id": 505, "type": "timeseries", "title": "All Banks - Circuit Breaker State", "description": "0=closed  1=open  2=half-open", "gridPos": { "x": 0, "y": 57, "w": 12, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "ibts_circuit_breaker_state{bank_code=~\"$bank\"}", "legendFormat": "{{ bank_code }}" } ], "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 2, "thresholds": { "steps": [ { "value": null, "color": "green" }, { "value": 1, "color": "red" } ] } } } },
+    { "id": 506, "type": "timeseries", "title": "All Banks - Fallback Usage Rate", "gridPos": { "x": 12, "y": 57, "w": 12, "h": 8 }, "options": { "legend": { "displayMode": "table", "placement": "bottom" } }, "targets": [ { "expr": "sum by (bank_code)(rate(ibts_bank_fallback_used_total{bank_code=~\"$bank\"}[1m]))", "legendFormat": "{{ bank_code }}" } ], "fieldConfig": { "defaults": { "unit": "reqps" } } }
   ]
 }

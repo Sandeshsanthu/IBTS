@@ -2,19 +2,20 @@
 # filename: bank-adapter/app/services/adapter_service.py
 
 import time
-import httpx
-import structlog
-import pybreaker
 
-from app.models import AdapterRequest, AdapterResponse
-from app.config import settings
-from app.transformers.transformer_factory import get_transformer
+import httpx
+import pybreaker
+import structlog
 from app.circuit_breaker.breaker_registry import get_breaker
-from shared.metrics.registry import (              # ← NEW
-    BANK_REQUESTS_TOTAL,
-    BANK_REQUEST_LATENCY_SECONDS,
+from app.config import settings
+from app.models import AdapterRequest, AdapterResponse
+from app.transformers.transformer_factory import get_transformer
+
+from shared.metrics.registry import (  # ← NEW
     BANK_FAILURES_TOTAL,
     BANK_FALLBACK_USED_TOTAL,
+    BANK_REQUEST_LATENCY_SECONDS,
+    BANK_REQUESTS_TOTAL,
     CIRCUIT_BREAKER_REJECTED_TOTAL,
 )
 

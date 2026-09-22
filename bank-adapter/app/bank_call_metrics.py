@@ -5,14 +5,15 @@ Executes a bank HTTP call through the circuit breaker, recording every outcome.
 """
 
 import time
+
 import httpx
 import pybreaker
 
 from shared.metrics.registry import (
-    BANK_REQUESTS_TOTAL,
-    BANK_REQUEST_LATENCY_SECONDS,
     BANK_FAILURES_TOTAL,
     BANK_FALLBACK_USED_TOTAL,
+    BANK_REQUEST_LATENCY_SECONDS,
+    BANK_REQUESTS_TOTAL,
     CIRCUIT_BREAKER_REJECTED_TOTAL,
 )
 

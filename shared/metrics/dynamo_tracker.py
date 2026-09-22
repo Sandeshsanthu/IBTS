@@ -26,8 +26,8 @@ import time
 from typing import Any
 
 from .registry import (
-    DYNAMO_OP_LATENCY_SECONDS,
     DYNAMO_ERRORS_TOTAL,
+    DYNAMO_OP_LATENCY_SECONDS,
 )
 
 # Maps our operation names to the L_OPERATION label values in the registry

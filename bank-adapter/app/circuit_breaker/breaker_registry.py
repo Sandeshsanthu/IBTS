@@ -2,8 +2,8 @@
 # filename: bank-adapter/app/circuit_breaker/breaker_registry.py
 
 import pybreaker
+from app.breaker_metrics import make_breaker  # ← NEW: use instrumented factory
 from app.config import settings
-from app.breaker_metrics import make_breaker    # ← NEW: use instrumented factory
 
 _breakers: dict[str, pybreaker.CircuitBreaker] = {}
 

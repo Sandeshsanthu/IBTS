@@ -3,6 +3,7 @@
 
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
     # DynamoDB
     dynamodb_endpoint_url: str = "http://localstack:4566"

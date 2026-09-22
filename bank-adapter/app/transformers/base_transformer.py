@@ -2,7 +2,9 @@
 # filename: bank-adapter/app/transformers/base_transformer.py
 
 from abc import ABC, abstractmethod
+
 from app.models import AdapterRequest
+
 
 class BaseTransformer(ABC):
     @abstractmethod

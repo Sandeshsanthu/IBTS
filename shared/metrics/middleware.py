@@ -10,18 +10,18 @@ Drop-in FastAPI middleware + /metrics endpoint for every IBTS service.
 """
 
 import time
-from typing import Callable
+from collections.abc import Callable
 
-from fastapi import APIRouter, Response, Request
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from fastapi import APIRouter, Request, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.routing import Match
 
 from .registry import (
-    HTTP_REQUESTS_TOTAL,
+    AUTH_FAILURES_TOTAL,
     HTTP_REQUEST_DURATION_SECONDS,
     HTTP_REQUESTS_IN_FLIGHT,
-    AUTH_FAILURES_TOTAL,
+    HTTP_REQUESTS_TOTAL,
     RATE_LIMIT_HITS_TOTAL,
     RATE_LIMIT_REMAINING,
 )

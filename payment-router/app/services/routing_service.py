@@ -6,18 +6,18 @@ import logging
 import time
 from decimal import Decimal
 
+import redis as redis_lib
 from app.config import settings
 from app.models import RouteRequest, RouteResponse
-from app.resolvers.vpa_resolver import resolve_vpa
-from app.resolvers.ifsc_resolver import resolve_ifsc
 from app.repository.routing_repository import RoutingRepository
-import redis as redis_lib
+from app.resolvers.ifsc_resolver import resolve_ifsc
+from app.resolvers.vpa_resolver import resolve_vpa
 
 from shared.metrics.registry import (
-    REDIS_OP_LATENCY_SECONDS,
     REDIS_ERRORS_TOTAL,
-    ROUTE_CACHE_OPS_TOTAL,
+    REDIS_OP_LATENCY_SECONDS,
     ROUTE_CACHE_HIT_RATIO,
+    ROUTE_CACHE_OPS_TOTAL,
 )
 
 logger = logging.getLogger(__name__)

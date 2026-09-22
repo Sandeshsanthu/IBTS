@@ -3,6 +3,7 @@
 
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
     app_name: str           = "payment-router"
     port: int               = 8081

@@ -2,11 +2,11 @@
 # filename: app/auth.py
 
 import logging
-from fastapi import Request, HTTPException, status
-from fastapi.security.utils import get_authorization_scheme_param
-import jwt
 
+import jwt
 from app.config import settings
+from fastapi import HTTPException, Request, status
+from fastapi.security.utils import get_authorization_scheme_param
 
 log = logging.getLogger("api-gateway.auth")
 

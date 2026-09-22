@@ -1,9 +1,10 @@
-import time
 import logging
+import time
+
 import boto3
+from app.config import settings
 from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import ClientError
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -2,13 +2,15 @@
 # filename: bank-adapter/app/main.py
 
 from shared.telemetry import setup_telemetry
+
 setup_telemetry()
 
 import structlog
-from fastapi import FastAPI
 from app.routers.adapter_router import router
-from app.routers.debug_router   import router as debug_router
-from shared.metrics.middleware  import MetricsMiddleware, metrics_router  # ← NEW
+from app.routers.debug_router import router as debug_router
+from fastapi import FastAPI
+
+from shared.metrics.middleware import MetricsMiddleware, metrics_router  # ← NEW
 
 structlog.configure(
     processors=[

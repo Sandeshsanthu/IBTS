@@ -3,6 +3,7 @@
 
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
     app_name:                str   = "bank-adapter"
     primary_timeout_seconds: float = 3.0

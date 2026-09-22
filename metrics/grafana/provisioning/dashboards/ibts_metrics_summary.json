@@ -1,0 +1,364 @@
+{
+  "id": null,
+  "version": 1,
+  "timezone": "browser",
+  "editable": true,
+  "uid": "ibts-metrics-summary",
+  "title": "IBTS - Metrics Summary",
+  "tags": ["ibts", "metrics", "totals", "counters"],
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "schemaVersion": 38,
+  "templating": {
+    "list": [
+      {
+        "name": "window",
+        "type": "custom",
+        "query": "5m,15m,30m,1h",
+        "current": { "text": "5m", "value": "5m" },
+        "options": [
+          { "text": "5m",  "value": "5m"  },
+          { "text": "15m", "value": "15m" },
+          { "text": "30m", "value": "30m" },
+          { "text": "1h",  "value": "1h"  }
+        ]
+      }
+    ]
+  },
+  "panels": [
+
+    { "id": 1000, "type": "row", "title": "PAYMENT TOTALS", "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }, "collapsed": false },
+
+    { "id": 1, "type": "stat", "title": "Total Requests", "gridPos": { "x": 0,  "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total[$window]))", "legendFormat": "requests" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 2, "type": "stat", "title": "Success Total", "gridPos": { "x": 4,  "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{status=\"SUCCESS\"}[$window]))", "legendFormat": "success" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }] } } } },
+
+    { "id": 3, "type": "stat", "title": "Failure Total", "gridPos": { "x": 8,  "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{status=\"FAILURE\"}[$window]))", "legendFormat": "failure" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } } } },
+
+    { "id": 4, "type": "stat", "title": "Unknown Total", "gridPos": { "x": 12, "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{status=\"UNKNOWN\"}[$window]))", "legendFormat": "unknown" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "yellow" }] } } } },
+
+    { "id": 5, "type": "stat", "title": "Timeout Total", "gridPos": { "x": 16, "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_bank_failures_total{failure_type=\"timeout\"}[$window]))", "legendFormat": "timeout" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "orange" }] } } } },
+
+    { "id": 6, "type": "stat", "title": "Duplicate Total", "gridPos": { "x": 20, "y": 1, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_idempotency_checks_total{idem_result=\"CACHED\"}[$window]))", "legendFormat": "duplicate" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 7, "type": "stat", "title": "p50 Latency", "gridPos": { "x": 0,  "y": 5, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "histogram_quantile(0.50, sum by (le)(rate(ibts_payment_end_to_end_latency_seconds_bucket[$window])))", "legendFormat": "p50" }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "yellow" }, { "value": 3, "color": "red" }] } } } },
+
+    { "id": 8, "type": "stat", "title": "p95 Latency", "gridPos": { "x": 4,  "y": 5, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum by (le)(rate(ibts_payment_end_to_end_latency_seconds_bucket[$window])))", "legendFormat": "p95" }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 2, "color": "yellow" }, { "value": 5, "color": "red" }] } } } },
+
+    { "id": 9, "type": "stat", "title": "p99 Latency", "gridPos": { "x": 8,  "y": 5, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_payment_end_to_end_latency_seconds_bucket[$window])))", "legendFormat": "p99" }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 3, "color": "yellow" }, { "value": 7, "color": "red" }] } } } },
+
+    { "id": 10, "type": "stat", "title": "Success Rate %", "gridPos": { "x": 12, "y": 5, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\"}[$window])) / sum(rate(ibts_payment_initiated_total[$window]))", "legendFormat": "success %" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 0.95, "color": "yellow" }, { "value": 0.99, "color": "green" }] } } } },
+
+    { "id": 11, "type": "stat", "title": "Error Rate %", "gridPos": { "x": 16, "y": 5, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(rate(ibts_payment_errors_total[$window])) / sum(rate(ibts_payment_initiated_total[$window]))", "legendFormat": "error %" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 0.01, "color": "yellow" }, { "value": 0.05, "color": "red" }] } } } },
+
+    { "id": 12, "type": "stat", "title": "Throughput req/s", "gridPos": { "x": 20, "y": 5, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(rate(ibts_payment_initiated_total[$window]))", "legendFormat": "req/s" }],
+      "fieldConfig": { "defaults": { "unit": "reqps", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 1001, "type": "row", "title": "PAYMENT TRENDS", "gridPos": { "x": 0, "y": 9, "w": 24, "h": 1 }, "collapsed": false },
+
+    { "id": 13, "type": "timeseries", "title": "Request Volume - Success / Failure / Unknown / Timeout", "gridPos": { "x": 0, "y": 10, "w": 24, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        { "expr": "sum(rate(ibts_payment_initiated_total[$window]))",                                        "legendFormat": "total" },
+        { "expr": "sum(rate(ibts_payment_initiated_total{status=\"SUCCESS\"}[$window]))",                   "legendFormat": "success" },
+        { "expr": "sum(rate(ibts_payment_initiated_total{status=\"FAILURE\"}[$window]))",                   "legendFormat": "failure" },
+        { "expr": "sum(rate(ibts_payment_initiated_total{status=\"UNKNOWN\"}[$window]))",                   "legendFormat": "unknown" },
+        { "expr": "sum(rate(ibts_bank_failures_total{failure_type=\"timeout\"}[$window]))",                 "legendFormat": "timeout" },
+        { "expr": "sum(rate(ibts_idempotency_checks_total{idem_result=\"CACHED\"}[$window]))",              "legendFormat": "duplicate/cached" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } } },
+
+    { "id": 14, "type": "timeseries", "title": "End-to-End Latency Percentiles", "gridPos": { "x": 0, "y": 18, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le)(rate(ibts_payment_end_to_end_latency_seconds_bucket[$window])))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum by (le)(rate(ibts_payment_end_to_end_latency_seconds_bucket[$window])))", "legendFormat": "p95" },
+        { "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_payment_end_to_end_latency_seconds_bucket[$window])))", "legendFormat": "p99" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } } },
+
+    { "id": 15, "type": "timeseries", "title": "Failure Breakdown by Type", "gridPos": { "x": 12, "y": 18, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        { "expr": "sum by (error_kind)(rate(ibts_payment_errors_total[$window]))", "legendFormat": "{{ error_kind }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } } },
+
+    { "id": 1002, "type": "row", "title": "BANK TOTALS", "gridPos": { "x": 0, "y": 26, "w": 24, "h": 1 }, "collapsed": false },
+
+    { "id": 20, "type": "stat", "title": "HDFC - Requests", "gridPos": { "x": 0,  "y": 27, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{payee_bank=\"HDFC\"}[$window]))", "legendFormat": "HDFC" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 21, "type": "stat", "title": "HDFC - Success", "gridPos": { "x": 3,  "y": 27, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{payee_bank=\"HDFC\", status=\"SUCCESS\"}[$window]))", "legendFormat": "HDFC success" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }] } } } },
+
+    { "id": 22, "type": "stat", "title": "HDFC - Failure", "gridPos": { "x": 6,  "y": 27, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_bank_failures_total{bank_code=\"HDFC\"}[$window]))", "legendFormat": "HDFC failure" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } } } },
+
+    { "id": 23, "type": "stat", "title": "HDFC - Timeout", "gridPos": { "x": 9,  "y": 27, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_bank_failures_total{bank_code=\"HDFC\", failure_type=\"timeout\"}[$window]))", "legendFormat": "HDFC timeout" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "orange" }] } } } },
+
+    { "id": 24, "type": "stat", "title": "ICICI - Requests", "gridPos": { "x": 12, "y": 27, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{payee_bank=\"ICICI\"}[$window]))", "legendFormat": "ICICI" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 25, "type": "stat", "title": "ICICI - Success", "gridPos": { "x": 15, "y": 27, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{payee_bank=\"ICICI\", status=\"SUCCESS\"}[$window]))", "legendFormat": "ICICI success" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }] } } } },
+
+    { "id": 26, "type": "stat", "title": "ICICI - Failure", "gridPos": { "x": 18, "y": 27, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_bank_failures_total{bank_code=\"ICICI\"}[$window]))", "legendFormat": "ICICI failure" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } } } },
+
+    { "id": 27, "type": "stat", "title": "ICICI - Timeout", "gridPos": { "x": 21, "y": 27, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_bank_failures_total{bank_code=\"ICICI\", failure_type=\"timeout\"}[$window]))", "legendFormat": "ICICI timeout" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "orange" }] } } } },
+
+    { "id": 28, "type": "stat", "title": "SBI - Requests", "gridPos": { "x": 0,  "y": 31, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{payee_bank=\"SBI\"}[$window]))", "legendFormat": "SBI" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 29, "type": "stat", "title": "SBI - Success", "gridPos": { "x": 3,  "y": 31, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{payee_bank=\"SBI\", status=\"SUCCESS\"}[$window]))", "legendFormat": "SBI success" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }] } } } },
+
+    { "id": 30, "type": "stat", "title": "SBI - Failure", "gridPos": { "x": 6,  "y": 31, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_bank_failures_total{bank_code=\"SBI\"}[$window]))", "legendFormat": "SBI failure" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } } } },
+
+    { "id": 31, "type": "stat", "title": "SBI - Timeout", "gridPos": { "x": 9,  "y": 31, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_bank_failures_total{bank_code=\"SBI\", failure_type=\"timeout\"}[$window]))", "legendFormat": "SBI timeout" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "orange" }] } } } },
+
+    { "id": 32, "type": "stat", "title": "YESBANK - Requests", "gridPos": { "x": 12, "y": 31, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{payee_bank=\"YESBANK\"}[$window]))", "legendFormat": "YESBANK" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 33, "type": "stat", "title": "YESBANK - Success", "gridPos": { "x": 15, "y": 31, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_payment_initiated_total{payee_bank=\"YESBANK\", status=\"SUCCESS\"}[$window]))", "legendFormat": "YESBANK success" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }] } } } },
+
+    { "id": 34, "type": "stat", "title": "YESBANK - Failure", "gridPos": { "x": 18, "y": 31, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_bank_failures_total{bank_code=\"YESBANK\"}[$window]))", "legendFormat": "YESBANK failure" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } } } },
+
+    { "id": 35, "type": "stat", "title": "YESBANK - Timeout", "gridPos": { "x": 21, "y": 31, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_bank_failures_total{bank_code=\"YESBANK\", failure_type=\"timeout\"}[$window]))", "legendFormat": "YESBANK timeout" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "orange" }] } } } },
+
+    { "id": 36, "type": "timeseries", "title": "Bank Request Volume Comparison", "gridPos": { "x": 0, "y": 35, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        { "expr": "sum by (payee_bank)(rate(ibts_payment_initiated_total[$window]))", "legendFormat": "{{ payee_bank }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } } },
+
+    { "id": 37, "type": "timeseries", "title": "Bank Failure Volume Comparison", "gridPos": { "x": 12, "y": 35, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        { "expr": "sum by (bank_code)(rate(ibts_bank_failures_total[$window]))", "legendFormat": "{{ bank_code }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } } },
+
+    { "id": 1003, "type": "row", "title": "ROUTING TOTALS", "gridPos": { "x": 0, "y": 43, "w": 24, "h": 1 }, "collapsed": false },
+
+    { "id": 40, "type": "stat", "title": "Route Cache Hits", "gridPos": { "x": 0, "y": 44, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_idempotency_checks_total{idem_result=\"CACHED\"}[$window]))", "legendFormat": "cache hits" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }] } } } },
+
+    { "id": 41, "type": "stat", "title": "Route Cache Misses", "gridPos": { "x": 4, "y": 44, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [{ "expr": "sum(increase(ibts_idempotency_checks_total{idem_result=\"NEW\"}[$window]))", "legendFormat": "cache miss" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 42, "type": "stat", "title": "Route Cache Hit Ratio", "gridPos": { "x": 8, "y": 44, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "ibts_route_cache_hit_ratio", "legendFormat": "ratio" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 0.7, "color": "yellow" }, { "value": 0.9, "color": "green" }] } } } },
+
+    { "id": 43, "type": "stat", "title": "Stale Route Entries", "gridPos": { "x": 12, "y": 44, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_idempotency_checks_total{idem_result=\"STALE\"}[$window]))", "legendFormat": "stale" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "yellow" }] } } } },
+
+    { "id": 44, "type": "stat", "title": "Redis p99 Latency", "gridPos": { "x": 16, "y": 44, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_redis_operation_latency_seconds_bucket[$window])))", "legendFormat": "redis p99" }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 0.05, "color": "yellow" }, { "value": 0.1, "color": "red" }] } } } },
+
+    { "id": 45, "type": "stat", "title": "Rate Limit Hits", "gridPos": { "x": 20, "y": 44, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_rate_limit_hits_total[$window]))", "legendFormat": "429s" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "yellow" }, { "value": 50, "color": "red" }] } } } },
+
+    { "id": 46, "type": "timeseries", "title": "Routing - Cache Hit vs Miss vs Stale", "gridPos": { "x": 0, "y": 48, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        { "expr": "sum by (idem_result)(rate(ibts_idempotency_checks_total[$window]))", "legendFormat": "{{ idem_result }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } } },
+
+    { "id": 47, "type": "timeseries", "title": "Redis Operation Latency p50 / p95 / p99", "gridPos": { "x": 12, "y": 48, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le, operation)(rate(ibts_redis_operation_latency_seconds_bucket[$window])))", "legendFormat": "p50 {{ operation }}" },
+        { "expr": "histogram_quantile(0.95, sum by (le, operation)(rate(ibts_redis_operation_latency_seconds_bucket[$window])))", "legendFormat": "p95 {{ operation }}" },
+        { "expr": "histogram_quantile(0.99, sum by (le, operation)(rate(ibts_redis_operation_latency_seconds_bucket[$window])))", "legendFormat": "p99 {{ operation }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } } },
+
+    { "id": 1004, "type": "row", "title": "CIRCUIT BREAKER TOTALS", "gridPos": { "x": 0, "y": 56, "w": 24, "h": 1 }, "collapsed": false },
+
+    { "id": 50, "type": "stat", "title": "CB Open Count", "gridPos": { "x": 0, "y": 57, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "count(ibts_circuit_breaker_state == 1) or vector(0)", "legendFormat": "open" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } } } },
+
+    { "id": 51, "type": "stat", "title": "CB Half-Open Count", "gridPos": { "x": 4, "y": 57, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "count(ibts_circuit_breaker_state == 2) or vector(0)", "legendFormat": "half-open" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "yellow" }] } } } },
+
+    { "id": 52, "type": "stat", "title": "Total CB Rejections", "gridPos": { "x": 8, "y": 57, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_circuit_breaker_rejected_total[$window]))", "legendFormat": "rejected" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } } } },
+
+    { "id": 53, "type": "stat", "title": "Total CB Fail Count", "gridPos": { "x": 12, "y": 57, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(ibts_circuit_breaker_fail_count)", "legendFormat": "fail count" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 5, "color": "yellow" }, { "value": 10, "color": "red" }] } } } },
+
+    { "id": 54, "type": "stat", "title": "Fallback Total Used", "gridPos": { "x": 16, "y": 57, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_bank_fallback_used_total[$window]))", "legendFormat": "fallback" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "yellow" }] } } } },
+
+    { "id": 55, "type": "stat", "title": "Auth Failures", "gridPos": { "x": 20, "y": 57, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_auth_failures_total[$window]))", "legendFormat": "auth fail" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } } } },
+
+    { "id": 56, "type": "timeseries", "title": "Circuit Breaker State per Bank (0=closed 1=open 2=half-open)", "gridPos": { "x": 0, "y": 61, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [{ "expr": "ibts_circuit_breaker_state", "legendFormat": "{{ bank_code }}" }],
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 2, "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } } } },
+
+    { "id": 57, "type": "timeseries", "title": "CB Rejections + Fallback Usage per Bank", "gridPos": { "x": 12, "y": 61, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        { "expr": "sum by (bank_code)(rate(ibts_circuit_breaker_rejected_total[$window]))", "legendFormat": "rejected {{ bank_code }}" },
+        { "expr": "sum by (bank_code)(rate(ibts_bank_fallback_used_total[$window]))",        "legendFormat": "fallback {{ bank_code }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } } },
+
+    { "id": 1005, "type": "row", "title": "IDEMPOTENCY + DYNAMO TOTALS", "gridPos": { "x": 0, "y": 69, "w": 24, "h": 1 }, "collapsed": false },
+
+    { "id": 60, "type": "stat", "title": "Idempotency NEW", "gridPos": { "x": 0, "y": 70, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_idempotency_checks_total{idem_result=\"NEW\"}[$window]))", "legendFormat": "new" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 61, "type": "stat", "title": "Idempotency CACHED", "gridPos": { "x": 4, "y": 70, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_idempotency_checks_total{idem_result=\"CACHED\"}[$window]))", "legendFormat": "cached" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }] } } } },
+
+    { "id": 62, "type": "stat", "title": "Idempotency STALE", "gridPos": { "x": 8, "y": 70, "w": 4, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_idempotency_checks_total{idem_result=\"STALE\"}[$window]))", "legendFormat": "stale" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "yellow" }] } } } },
+
+    { "id": 63, "type": "stat", "title": "DynamoDB GetItem Total", "gridPos": { "x": 12, "y": 70, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_dynamo_operation_latency_seconds_count{operation=\"GetItem\"}[$window]))", "legendFormat": "GetItem" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 64, "type": "stat", "title": "DynamoDB PutItem Total", "gridPos": { "x": 15, "y": 70, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_dynamo_operation_latency_seconds_count{operation=\"PutItem\"}[$window]))", "legendFormat": "PutItem" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 65, "type": "stat", "title": "DynamoDB UpdateItem Total", "gridPos": { "x": 18, "y": 70, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "sum(increase(ibts_dynamo_operation_latency_seconds_count{operation=\"UpdateItem\"}[$window]))", "legendFormat": "UpdateItem" }],
+      "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "steps": [{ "value": null, "color": "blue" }] } } } },
+
+    { "id": 66, "type": "stat", "title": "DynamoDB p99 Latency", "gridPos": { "x": 21, "y": 70, "w": 3, "h": 4 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [{ "expr": "histogram_quantile(0.99, sum by (le)(rate(ibts_dynamo_operation_latency_seconds_bucket[$window])))", "legendFormat": "dynamo p99" }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 0.1, "color": "yellow" }, { "value": 0.5, "color": "red" }] } } } },
+
+    { "id": 67, "type": "timeseries", "title": "DynamoDB Operation Latency p50 / p95 / p99 by Operation", "gridPos": { "x": 0, "y": 74, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le, operation)(rate(ibts_dynamo_operation_latency_seconds_bucket[$window])))", "legendFormat": "p50 {{ operation }}" },
+        { "expr": "histogram_quantile(0.95, sum by (le, operation)(rate(ibts_dynamo_operation_latency_seconds_bucket[$window])))", "legendFormat": "p95 {{ operation }}" },
+        { "expr": "histogram_quantile(0.99, sum by (le, operation)(rate(ibts_dynamo_operation_latency_seconds_bucket[$window])))", "legendFormat": "p99 {{ operation }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } } },
+
+    { "id": 68, "type": "timeseries", "title": "Idempotency NEW vs CACHED vs STALE Trend", "gridPos": { "x": 12, "y": 74, "w": 12, "h": 8 },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
+      "targets": [
+        { "expr": "sum by (idem_result)(rate(ibts_idempotency_checks_total[$window]))", "legendFormat": "{{ idem_result }}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } } }
+  ]
+}
