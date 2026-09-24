@@ -153,7 +153,7 @@ jobs:
           REDIS_PORT: "6379"
         run: |
           if [ ! -d "tests" ] || [ -z "$(find tests -name '*.py' -print -quit)" ]; then
-            echo "No tests found in ${{ matrix.dir }}/tests — skipping coverage gate."
+            echo "No tests found in ${{ matrix.dir }}/tests - skipping coverage gate."
             exit 0
           fi
           python -m pytest tests/ \
@@ -178,6 +178,7 @@ jobs:
           path: ${{ matrix.dir }}/junit.xml
           retention-days: 14
 
+  # ── DOCKER BUILD + PUSH with SHA256 digest capture for auditing ───────────
   docker-build-push:
     name: Docker - ${{ matrix.service }}
     runs-on: ubuntu-latest
@@ -200,6 +201,7 @@ jobs:
             file: idempotency-guard/Dockerfile
     steps:
       - uses: actions/checkout@v4
+
       - name: Check Dockerfile exists
         id: df_check
         run: |
@@ -209,17 +211,21 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "No Dockerfile at ${{ matrix.file }} - skipping."
           fi
+
       - name: Set up Docker Buildx
         if: steps.df_check.outputs.exists == 'true'
         uses: docker/setup-buildx-action@v3
+
       - name: Log in to Docker Hub
         if: steps.df_check.outputs.exists == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build and push ${{ matrix.service }}
         if: steps.df_check.outputs.exists == 'true'
+        id: push                                         # ← id needed to capture digest
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -230,6 +236,71 @@ jobs:
             ${{ env.REGISTRY_USER }}/ibts-${{ matrix.service }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to:   type=gha,mode=max,scope=${{ matrix.service }}
+
+      # ── Capture SHA256 digest for audit trail ──────────────────────────────
+      - name: Write image digest audit record
+        if: steps.df_check.outputs.exists == 'true'
+        run: |
+          mkdir -p audit
+          cat <<EOF > audit/${{ matrix.service }}-digest.json
+          {
+            "service":    "${{ matrix.service }}",
+            "git_sha":    "${{ github.sha }}",
+            "git_ref":    "${{ github.ref }}",
+            "actor":      "${{ github.actor }}",
+            "build_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "image_tags": [
+              "${{ env.REGISTRY_USER }}/ibts-${{ matrix.service }}:latest",
+              "${{ env.REGISTRY_USER }}/ibts-${{ matrix.service }}:${{ github.sha }}"
+            ],
+            "image_digest": "${{ steps.push.outputs.digest }}"
+          }
+          EOF
+          echo "------- AUDIT RECORD -------"
+          cat audit/${{ matrix.service }}-digest.json
+
+      - name: Upload digest audit record
+        if: steps.df_check.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.service }}
+          path: audit/${{ matrix.service }}-digest.json
+          retention-days: 90                             # ← keep audit records 90 days
+
+  # ── AUDIT SUMMARY — combines all digest records ───────────────────────────
+  audit-summary:
+    name: Build Audit Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - docker-build-push
+    if: always()
+    steps:
+      - name: Download all digest records
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: audit/
+
+      - name: Print full audit summary
+        run: |
+          echo "=============================="
+          echo "  IBTS IMAGE BUILD AUDIT LOG  "
+          echo "  Commit: ${{ github.sha }}   "
+          echo "  Run:    ${{ github.run_id }} "
+          echo "=============================="
+          for f in audit/*.json; do
+            echo ""
+            cat "$f"
+          done
+
+      - name: Upload combined audit bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-bundle-${{ github.sha }}
+          path: audit/
+          retention-days: 90
 
   update-k8s-manifests:
     name: Update K8s Manifests
