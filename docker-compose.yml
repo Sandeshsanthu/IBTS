@@ -62,7 +62,7 @@ services:
   # ─────────────────────────────────────────────
 
   idempotency-guard:
-    image: sandeshs/ibts-idempotency-guard:latest   # ← CHANGED: pull from Docker Hub
+    image: sandeshs/ibts-idempotency-guard:63f878b4cf3540cd3d45de3f3d9c25d047e16262   # ← CHANGED: pull from Docker Hub
     container_name: idempotency-guard
     expose:
       - "8080"
@@ -94,7 +94,7 @@ services:
       - ibts-network
 
   bank-adapter:
-    image: sandeshs/ibts-bank-adapter:latest        # ← CHANGED: pull from Docker Hub
+    image: sandeshs/ibts-bank-adapter:63f878b4cf3540cd3d45de3f3d9c25d047e16262        # ← CHANGED: pull from Docker Hub
     container_name: bank-adapter
     expose:
       - "8082"
@@ -124,7 +124,7 @@ services:
       - ibts-network
 
   payment-router:
-    image: sandeshs/ibts-payment-router:latest      # ← CHANGED: pull from Docker Hub
+    image: sandeshs/ibts-payment-router:63f878b4cf3540cd3d45de3f3d9c25d047e16262      # ← CHANGED: pull from Docker Hub
     container_name: payment-router
     expose:
       - "8081"
@@ -164,7 +164,7 @@ services:
       - ibts-network
 
   payment-switch:
-    image: sandeshs/ibts-payment-switch:latest      # ← CHANGED: pull from Docker Hub
+    image: sandeshs/ibts-payment-switch:63f878b4cf3540cd3d45de3f3d9c25d047e16262      # ← CHANGED: pull from Docker Hub
     container_name: payment-switch
     expose:
       - "8083"
@@ -204,7 +204,7 @@ services:
       - ibts-network
 
   api-gateway:
-    image: sandeshs/ibts-api-gateway:latest         # ← CHANGED: pull from Docker Hub
+    image: sandeshs/ibts-api-gateway:63f878b4cf3540cd3d45de3f3d9c25d047e16262         # ← CHANGED: pull from Docker Hub
     container_name: api-gateway
     ports:
       - "8084:8084"

@@ -1,0 +1,102 @@
+name: "Terraform CI/CD Pipeline (Keyless OIDC)"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: terraform-environment
+  cancel-in-progress: false
+
+# 🔑 CRITICAL: Must be declared globally or at the job level to request the OIDC JWT token
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ==========================================
+  # JOB 1: PLAN (Runs on PRs and Push to Main)
+  # ==========================================
+  terraform-plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: "us-east-1"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Exchanges the GitHub Token for a short-lived AWS session token
+      - name: Authenticate with AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "GitHubActionsTerraformPlan"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.0"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -out=tfplan
+
+      - name: Upload Terraform Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan
+          retention-days: 1
+
+  # ==========================================
+  # JOB 2: APPLY (Only runs on push/merge to Main)
+  # ==========================================
+  terraform-apply:
+    name: "Terraform Apply"
+    needs: terraform-plan
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production # 💥 Your Future Manual Approval Review Gate
+    env:
+      AWS_REGION: "us-east-1"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Keyless OIDC Login happens again for the Apply phase
+      - name: Authenticate with AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "GitHubActionsTerraformApply"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.0"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Download Terraform Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -input=false tfplan
