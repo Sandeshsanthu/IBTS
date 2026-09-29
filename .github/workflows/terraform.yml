@@ -12,7 +12,6 @@ concurrency:
   group: terraform-environment
   cancel-in-progress: false
 
-# 🔑 CRITICAL: Must be declared globally or at the job level to request the OIDC JWT token
 permissions:
   id-token: write
   contents: read
@@ -31,7 +30,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Exchanges the GitHub Token for a short-lived AWS session token
       - name: Authenticate with AWS via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -46,19 +44,23 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+        working-directory: infra-aws/inital # 👈 Directs actions to your subfolder
 
       - name: Terraform Format Check
         run: terraform fmt -check
+        working-directory: infra-aws/inital # 👈 Directs actions to your subfolder
 
       - name: Terraform Plan
         id: plan
         run: terraform plan -out=tfplan
+        working-directory: infra-aws/inital # 👈 Directs actions to your subfolder
 
+      # Save the generated plan file out of the subdirectory as a workflow artifact
       - name: Upload Terraform Plan Artifact
         uses: actions/upload-artifact@v4
         with:
           name: tfplan
-          path: tfplan
+          path: infra-aws/inital/tfplan
           retention-days: 1
 
   # ==========================================
@@ -69,7 +71,7 @@ jobs:
     needs: terraform-plan
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: production # 💥 Your Future Manual Approval Review Gate
+    environment: production # Your Manual Approval Review Gate
     env:
       AWS_REGION: "us-east-1"
 
@@ -77,7 +79,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Keyless OIDC Login happens again for the Apply phase
       - name: Authenticate with AWS via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -92,11 +93,15 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+        working-directory: infra-aws/inital # 👈 Required so it maps the exact same OIDC state backend
 
+      # Download the execution plan artifact directly back into your subfolder
       - name: Download Terraform Plan Artifact
         uses: actions/download-artifact@v4
         with:
           name: tfplan
+          path: infra-aws/inital
 
       - name: Terraform Apply
         run: terraform apply -input=false tfplan
+        working-directory: infra-aws/inital # 👈 Executes application inside the subfolder
