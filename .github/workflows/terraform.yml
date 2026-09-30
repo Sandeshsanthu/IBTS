@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   # ==========================================
-  # JOB 1: PLAN (Runs on PRs and Push to Main)
+  # JOB 1: PLAN
   # ==========================================
   terraform-plan:
     name: "Terraform Plan"
@@ -50,10 +50,8 @@ jobs:
         run: terraform init
         working-directory: infra-aws/inital
 
-      # ✅ ADDED: Syncs real AWS state into S3 before plan reads it
-      # This ensures plan sees imported resources (EKS cluster, IAM policies etc.)
-      # and does NOT try to recreate them
-      # Safe to run always — if nothing exists yet it is a no-op
+      # ✅ Refresh here — BEFORE plan — so plan sees real AWS state
+      # This is the only place refresh should run
       - name: Terraform Refresh
         run: terraform refresh
         working-directory: infra-aws/inital
@@ -71,7 +69,7 @@ jobs:
           retention-days: 1
 
   # ==========================================
-  # JOB 2: APPLY (Only runs on push/merge to Main)
+  # JOB 2: APPLY
   # ==========================================
   terraform-apply:
     name: "Terraform Apply"
@@ -104,12 +102,9 @@ jobs:
         run: terraform init
         working-directory: infra-aws/inital
 
-      # ✅ ADDED: Apply job runs on a brand new runner with no memory
-      # Init pulls state from S3 but attributes may be stale
-      # Refresh ensures apply sees the same reality as plan did
-      - name: Terraform Refresh
-        run: terraform refresh
-        working-directory: infra-aws/inital
+      # ❌ NO refresh here — refresh would update S3 state after the plan
+      #    was created, making tfplan stale and causing "Saved plan is stale"
+      #    The plan already captured fresh state — just apply it as-is
 
       - name: Download Terraform Plan Artifact
         uses: actions/download-artifact@v4
