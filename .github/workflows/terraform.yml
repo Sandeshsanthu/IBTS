@@ -24,7 +24,7 @@ jobs:
     name: "Terraform Plan"
     runs-on: ubuntu-latest
     env:
-      AWS_REGION: "us-east-1"
+      AWS_REGION: "ap-south-1" # 🚀 UPDATED: Matched your ap-south-1 region variable configuration
 
     steps:
       - name: Checkout Code
@@ -41,12 +41,11 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.10.5"
+          terraform_wrapper: false # 🚀 FIXED: Prevents wrapper script from throwing fake exit errors [26]
 
       - name: Terraform Init
         run: terraform init
         working-directory: infra-aws/inital
-
-      # 🚀 REMOVED: The 'terraform fmt -check' step has been bypassed so style mismatches won't block deployment
 
       - name: Terraform Plan
         id: plan
@@ -71,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production # Your Manual Approval Review Gate
     env:
-      AWS_REGION: "us-east-1"
+      AWS_REGION: "ap-south-1" # 🚀 UPDATED: Matched your ap-south-1 region variable configuration
 
     steps:
       - name: Checkout Code
@@ -88,6 +87,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.10.5"
+          terraform_wrapper: false # 🚀 FIXED: Disables the wrapper for the Apply job as well [26]
 
       - name: Terraform Init
         run: terraform init
