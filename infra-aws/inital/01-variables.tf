@@ -33,23 +33,24 @@ variable "vpc_cidr" {
   default     = "10.0.0.0/16"
 }
 
-# Single AZ for POC — eliminates cross-AZ data transfer costs
+# 🚀 FIXED: Expanded to two AZs to satisfy the strict AWS EKS API constraint.
+# You can still isolate your actual nodes to 'ap-south-1a' later in Karpenter/NodeGroups.
 variable "availability_zones" {
-  description = "AZs to use — single AZ for POC"
+  description = "AZs to use — minimum of 2 required by AWS EKS API"
   type        = list(string)
-  default     = ["ap-south-1a"]
+  default     = ["ap-south-1a", "ap-south-1b"]
 }
 
 variable "private_subnet_cidrs" {
   description = "Private subnets — nodes and pods live here"
   type        = list(string)
-  default     = ["10.0.10.0/24"]
+  default     = ["10.0.10.0/24", "10.0.11.0/24"]
 }
 
 variable "public_subnet_cidrs" {
   description = "Public subnets — ALB and NAT Gateway live here"
   type        = list(string)
-  default     = ["10.0.1.0/24"]
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
 }
 
 # ── Node sizing
