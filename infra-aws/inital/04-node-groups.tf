@@ -12,7 +12,15 @@ module "eks_system_node_group" {
   cluster_name    = module.eks.cluster_name
   cluster_version = module.eks.cluster_version
 
-  # 🚀 FIXED: Added [0] index to cleanly pull the primary private subnet (ap-south-1a) from the count array
+  # ✅ FIX 2: cluster_service_cidr is REQUIRED when using this submodule standalone
+  # Without it the internal null_resource validation fails with:
+  #   "local.cluster_service_cidr is empty string"
+  # module.eks.cluster_service_cidr returns the CIDR EKS assigned
+  # to Kubernetes Services (default: 172.20.0.0/16)
+  # This is different from your VPC CIDR — it's the internal k8s service network
+  cluster_service_cidr = module.eks.cluster_service_cidr
+
+  # Single AZ for POC — avoids cross-AZ EBS volume attachment issues
   subnet_ids = [aws_subnet.private[0].id]
 
   min_size     = 1
@@ -22,6 +30,11 @@ module "eks_system_node_group" {
   instance_types = [var.system_node_instance_type]
   capacity_type  = "ON_DEMAND"
 
+  # POC: no taint on system node
+  # This lets LB Controller, metrics-server, and Karpenter schedule here
+  # without needing tolerations in their Helm values.
+  # Production: re-add CriticalAddonsOnly taint and add tolerations
+  # to system Helm charts to prevent app pods landing here.
   taints = {}
 
   labels = {
