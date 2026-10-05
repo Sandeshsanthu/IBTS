@@ -5,11 +5,9 @@ name: "Terraform CI/CD Pipeline (Keyless OIDC)"
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 concurrency:
   group: terraform-environment
@@ -20,98 +18,156 @@ permissions:
   contents: read
 
 jobs:
-  # ==========================================
-  # JOB 1: PLAN
-  # ==========================================
-  terraform-plan:
-    name: "Terraform Plan"
+  # ════════════════════════════════════════
+  # STAGE 1 PLAN — VPC + EKS cluster only
+  # ════════════════════════════════════════
+  stage1-plan:
+    name: "Stage 1 Plan (Cluster)"
     runs-on: ubuntu-latest
     env:
       AWS_REGION: "ap-south-1"
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Authenticate with AWS via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: "GitHubActionsTerraformPlan"
+          role-session-name: "TerraformStage1Plan"
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.10.5"
           terraform_wrapper: false
 
-      - name: Terraform Init
+      - name: Init
         run: terraform init
-        working-directory: infra-aws/inital
+        working-directory: infra-aws/stage1-cluster
 
-      # ✅ Refresh here — BEFORE plan — so plan sees real AWS state
-      # This is the only place refresh should run
-      - name: Terraform Refresh
-        run: terraform refresh
-        working-directory: infra-aws/inital
+      - name: Plan
+        run: terraform plan -refresh=true -out=tfplan-stage1
+        working-directory: infra-aws/stage1-cluster
 
-      - name: Terraform Plan
-        id: plan
-        run: terraform plan -out=tfplan
-        working-directory: infra-aws/inital
-
-      - name: Upload Terraform Plan Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: tfplan
-          path: infra-aws/inital/tfplan
+          name: tfplan-stage1
+          path: infra-aws/stage1-cluster/tfplan-stage1
           retention-days: 1
 
-  # ==========================================
-  # JOB 2: APPLY
-  # ==========================================
-  terraform-apply:
-    name: "Terraform Apply"
-    needs: terraform-plan
+  # ════════════════════════════════════════
+  # STAGE 1 APPLY — creates cluster
+  # ════════════════════════════════════════
+  stage1-apply:
+    name: "Stage 1 Apply (Cluster)"
+    needs: stage1-plan
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: production
-
     env:
       AWS_REGION: "ap-south-1"
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Authenticate with AWS via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: "GitHubActionsTerraformApply"
+          role-session-name: "TerraformStage1Apply"
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.10.5"
           terraform_wrapper: false
 
-      - name: Terraform Init
+      - name: Init
         run: terraform init
-        working-directory: infra-aws/inital
+        working-directory: infra-aws/stage1-cluster
 
-      # ❌ NO refresh here — refresh would update S3 state after the plan
-      #    was created, making tfplan stale and causing "Saved plan is stale"
-      #    The plan already captured fresh state — just apply it as-is
-
-      - name: Download Terraform Plan Artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: tfplan
-          path: infra-aws/inital
+          name: tfplan-stage1
+          path: infra-aws/stage1-cluster
 
-      - name: Terraform Apply
-        run: terraform apply -input=false tfplan
-        working-directory: infra-aws/inital
+      - name: Apply
+        run: terraform apply -input=false tfplan-stage1
+        working-directory: infra-aws/stage1-cluster
+
+  # ════════════════════════════════════════
+  # STAGE 2 PLAN — k8s config, Karpenter
+  # Runs ONLY after stage1 apply succeeds
+  # ════════════════════════════════════════
+  stage2-plan:
+    name: "Stage 2 Plan (K8s Config)"
+    needs: stage1-apply
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: "ap-south-1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "TerraformStage2Plan"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+          terraform_wrapper: false
+
+      - name: Init
+        run: terraform init
+        working-directory: infra-aws/stage2-config
+
+      - name: Plan
+        run: terraform plan -refresh=true -out=tfplan-stage2
+        working-directory: infra-aws/stage2-config
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-stage2
+          path: infra-aws/stage2-config/tfplan-stage2
+          retention-days: 1
+
+  # ════════════════════════════════════════
+  # STAGE 2 APPLY — Karpenter + namespaces
+  # ════════════════════════════════════════
+  stage2-apply:
+    name: "Stage 2 Apply (K8s Config)"
+    needs: stage2-plan
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_REGION: "ap-south-1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "TerraformStage2Apply"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+          terraform_wrapper: false
+
+      - name: Init
+        run: terraform init
+        working-directory: infra-aws/stage2-config
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan-stage2
+          path: infra-aws/stage2-config
+
+      - name: Apply
+        run: terraform apply -input=false tfplan-stage2
+        working-directory: infra-aws/stage2-config
