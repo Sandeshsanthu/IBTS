@@ -69,12 +69,11 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
 
       - name: Terraform Destroy Stage 2
         run: terraform destroy -auto-approve
-        working-directory: infra-aws/stage2-config
-
+        working-directory: infra-aws/inital/stage2-config
       - name: Confirm Stage 2 Destroyed
         run: |
           echo "══════════════════════════════════════"
@@ -83,7 +82,7 @@ jobs:
             && echo "⚠️  some resources still in state" \
             || echo "✅ state is empty"
           echo "══════════════════════════════════════"
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
 
   # ════════════════════════════════════════
   # STAGE 1 DESTROY — cluster + VPC
@@ -116,11 +115,11 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-        working-directory: infra-aws/stage1-cluster
+        working-directory: infra-aws/inital/stage1-cluster
 
       - name: Terraform Destroy Stage 1
         run: terraform destroy -auto-approve
-        working-directory: infra-aws/stage1-cluster
+        working-directory: infra-aws/inital/stage1-cluster
 
       - name: Confirm Stage 1 Destroyed
         run: |
@@ -130,7 +129,7 @@ jobs:
             && echo "⚠️  some resources still in state" \
             || echo "✅ state is empty"
           echo "══════════════════════════════════════"
-        working-directory: infra-aws/stage1-cluster
+        working-directory: infra-aws/inital/stage1-cluster
 
   # ════════════════════════════════════════
   # SUMMARY
