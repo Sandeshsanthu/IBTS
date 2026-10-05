@@ -43,16 +43,16 @@ jobs:
 
       - name: Init
         run: terraform init
-        working-directory: infra-aws/stage1-cluster
+        working-directory: infra-aws/inital/stage1-cluster
 
       - name: Plan
         run: terraform plan -refresh=true -out=tfplan-stage1
-        working-directory: infra-aws/stage1-cluster
+        working-directory: infra-aws/inital/stage1-cluster
 
       - uses: actions/upload-artifact@v4
         with:
           name: tfplan-stage1
-          path: infra-aws/stage1-cluster/tfplan-stage1
+          path: infra-aws/inital/stage1-cluster/tfplan-stage1
           retention-days: 1
 
   # ════════════════════════════════════════
@@ -83,16 +83,16 @@ jobs:
 
       - name: Init
         run: terraform init
-        working-directory: infra-aws/stage1-cluster
+        working-directory: infra-aws/inital/stage1-cluster
 
       - uses: actions/download-artifact@v4
         with:
           name: tfplan-stage1
-          path: infra-aws/stage1-cluster
+          path: infra-aws/inital/stage1-cluster
 
       - name: Apply
         run: terraform apply -input=false tfplan-stage1
-        working-directory: infra-aws/stage1-cluster
+        working-directory: infra-aws/inital/stage1-cluster
 
   # ════════════════════════════════════════
   # STAGE 2 PLAN — k8s config, Karpenter
@@ -121,16 +121,16 @@ jobs:
 
       - name: Init
         run: terraform init
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
 
       - name: Plan
         run: terraform plan -refresh=true -out=tfplan-stage2
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
 
       - uses: actions/upload-artifact@v4
         with:
           name: tfplan-stage2
-          path: infra-aws/stage2-config/tfplan-stage2
+          path: infra-aws/inital/stage2-config/tfplan-stage2
           retention-days: 1
 
   # ════════════════════════════════════════
@@ -161,13 +161,13 @@ jobs:
 
       - name: Init
         run: terraform init
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
 
       - uses: actions/download-artifact@v4
         with:
           name: tfplan-stage2
-          path: infra-aws/stage2-config
+          path: infra-aws/inital/stage2-config
 
       - name: Apply
         run: terraform apply -input=false tfplan-stage2
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
