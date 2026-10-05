@@ -86,3 +86,10 @@ variable "aws_lb_controller_version" {
   type        = string
   default     = "1.8.1"
 }
+
+
+variable "karpenter_version" {
+  description = "Karpenter Helm chart version"
+  type        = string
+  default     = "1.0.8"   # ← was "0.36.2" — v0.x is incompatible with v1.x CRDs
+}

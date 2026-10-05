@@ -35,7 +35,13 @@ module "eks_system_node_group" {
   # without needing tolerations in their Helm values.
   # Production: re-add CriticalAddonsOnly taint and add tolerations
   # to system Helm charts to prevent app pods landing here.
-  taints = {}
+  taints = {
+    addons = {
+      key    = "CriticalAddonsOnly"
+      value  = "true"
+      effect = "NO_SCHEDULE"
+    }
+  }
 
   labels = {
     role                         = "system"
@@ -61,8 +67,11 @@ module "eks_system_node_group" {
     }
   }
 
+  
+
   cluster_primary_security_group_id = module.eks.cluster_primary_security_group_id
   vpc_security_group_ids            = [module.eks.node_security_group_id]
 
   depends_on = [module.eks]
 }
+
