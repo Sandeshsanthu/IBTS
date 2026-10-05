@@ -3,7 +3,7 @@
 
 variable "aws_region" {
   type    = string
-  default = "ap-south-1"
+  default = "ap-south-2"
 }
 
 variable "environment" {
@@ -28,7 +28,7 @@ variable "aws_lb_controller_version" {
 
 variable "karpenter_spot_instance_families" {
   type    = list(string)
-  default = ["t3", "t3a", "t2"]
+  default = ["t3", "t3a"]
 }
 
 variable "karpenter_spot_instance_sizes" {

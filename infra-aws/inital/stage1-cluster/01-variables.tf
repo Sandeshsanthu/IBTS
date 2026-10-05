@@ -3,7 +3,7 @@
 
 variable "aws_region" {
   type    = string
-  default = "ap-south-1"
+  default = "ap-south-2"
 }
 
 variable "environment" {
@@ -28,7 +28,7 @@ variable "vpc_cidr" {
 
 variable "availability_zones" {
   type    = list(string)
-  default = ["ap-south-1a", "ap-south-1b"]
+  default = ["ap-south-2a", "ap-south-2b"]
 }
 
 variable "private_subnet_cidrs" {

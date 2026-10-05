@@ -238,7 +238,7 @@ resource "kubectl_manifest" "karpenter_node_pool" {
             { key = "karpenter.k8s.aws/instance-family",  operator = "In", values = var.karpenter_spot_instance_families },
             { key = "karpenter.k8s.aws/instance-size",    operator = "In", values = var.karpenter_spot_instance_sizes },
             { key = "kubernetes.io/arch",                  operator = "In", values = ["amd64"] },
-            { key = "topology.kubernetes.io/zone",         operator = "In", values = ["ap-south-1a"] }
+            { key = "topology.kubernetes.io/zone",         operator = "In", values = ["ap-south-2a"] }
           ]
         }
       }
