@@ -74,11 +74,7 @@ variable "karpenter_spot_instance_sizes" {
 }
 
 # ── Karpenter version — check https://github.com/aws/karpenter/releases
-variable "karpenter_version" {
-  description = "Karpenter Helm chart version"
-  type        = string
-  default     = "0.36.2"
-}
+
 
 # ── AWS LB Controller version
 variable "aws_lb_controller_version" {
