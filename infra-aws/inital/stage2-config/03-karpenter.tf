@@ -191,7 +191,7 @@ resource "helm_release" "karpenter" {
   depends_on = [aws_eks_access_entry.karpenter_node]
 }
 
-# ── ✅ ADDED: Wait for Karpenter webhook to be ready
+# ── Wait for Karpenter webhook to be ready
 # Helm reports success when chart is installed but the pod
 # takes 30-90s more to start and register its webhook
 # EC2NodeClass creation calls the webhook → fails if pod not ready
@@ -225,8 +225,6 @@ resource "kubectl_manifest" "karpenter_node_class" {
     }
   })
 
-  # ✅ CHANGED: was depends_on = [helm_release.karpenter]
-  # now waits for the 90s sleep so webhook is actually ready
   depends_on = [time_sleep.karpenter_webhook_ready]
 }
 
@@ -254,8 +252,13 @@ resource "kubectl_manifest" "karpenter_node_pool" {
           ]
         }
       }
-      limits     = { cpu = "8", memory = "16Gi" }
-      disruption = { consolidationPolicy = "WhenUnderutilized", consolidateAfter = "30s" }
+      limits = { cpu = "8", memory = "16Gi" }
+
+      disruption = {
+        consolidationPolicy = "WhenUnderutilized"
+        # ✅ REMOVED: consolidateAfter = "30s"
+        # Only valid with WhenEmpty — not WhenUnderutilized
+      }
     }
   })
 
