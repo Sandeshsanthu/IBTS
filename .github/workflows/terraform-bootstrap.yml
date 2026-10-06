@@ -38,7 +38,7 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
 
       # ── IAM Policies
       - name: Import IAM Policy - payment-switch
