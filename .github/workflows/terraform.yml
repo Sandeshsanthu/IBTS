@@ -95,8 +95,7 @@ jobs:
         working-directory: infra-aws/inital/stage1-cluster
 
   # ════════════════════════════════════════
-  # STAGE 2 PLAN — k8s config, Karpenter
-  # Runs ONLY after stage1 apply succeeds
+  # STAGE 2 PLAN
   # ════════════════════════════════════════
   stage2-plan:
     name: "Stage 2 Plan (K8s Config)"
@@ -104,13 +103,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: "ap-south-2"
-    # ✅ ADDED: sensitive vars injected from GitHub secrets
-    # Plan must see these so it can diff the secret + configmap correctly
-    # Without these plan will fail → "Variables not set"
-    # GitHub → Settings → Secrets → Actions:
-    #   TF_VAR_jwt_secret
-    #   TF_VAR_api_key
-    #   TF_VAR_grafana_admin_password
 
     steps:
       - uses: actions/checkout@v4
@@ -131,7 +123,6 @@ jobs:
         working-directory: infra-aws/inital/stage2-config
 
       - name: Plan
-        # ✅ ADDED: TF_VAR_ env vars for jwt_secret, api_key, grafana_admin_password
         env:
           TF_VAR_jwt_secret:             ${{ secrets.TF_VAR_JWT_SECRET }}
           TF_VAR_api_key:                ${{ secrets.TF_VAR_API_KEY }}
@@ -146,7 +137,7 @@ jobs:
           retention-days: 1
 
   # ════════════════════════════════════════
-  # STAGE 2 APPLY — Karpenter + namespaces
+  # STAGE 2 APPLY
   # ════════════════════════════════════════
   stage2-apply:
     name: "Stage 2 Apply (K8s Config)"
@@ -171,6 +162,36 @@ jobs:
           terraform_version: "1.10.5"
           terraform_wrapper: false
 
+      # ✅ ADDED: configure kubectl so helm commands work in pipeline
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name $(terraform -chdir=infra-aws/inital/stage2-config output -raw cluster_name 2>/dev/null || \
+                     aws eks list-clusters --region ${{ env.AWS_REGION }} \
+                       --query 'clusters[0]' --output text)
+
+      # ✅ ADDED: clean up failed Helm releases before apply
+      # --ignore-not-found → safe to run even on first deploy
+      # only uninstalls releases that are in failed/pending state
+      # healthy releases are left untouched by helm uninstall
+      - name: Cleanup failed Helm releases
+        run: |
+          # Install helm (already available on ubuntu-latest)
+          # Uninstall only if release exists in failed state
+          for release in kube-prometheus-stack elasticsearch otel-collector kibana jaeger fluent-bit; do
+            STATUS=$(helm status $release -n ibts-observability --output json 2>/dev/null \
+                       | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['status'])" \
+                       2>/dev/null || echo "not-found")
+
+            if [[ "$STATUS" == "failed" || "$STATUS" == "pending-install" || "$STATUS" == "pending-upgrade" ]]; then
+              echo "Uninstalling failed release: $release (status: $STATUS)"
+              helm uninstall $release -n ibts-observability
+            else
+              echo "Release $release status: $STATUS — skipping"
+            fi
+          done
+
       - name: Init
         run: terraform init
         working-directory: infra-aws/inital/stage2-config
@@ -181,8 +202,6 @@ jobs:
           path: infra-aws/inital/stage2-config
 
       - name: Apply
-        # ✅ ADDED: TF_VAR_ env vars required at apply time
-        # even though plan is pre-baked, apply re-evaluates sensitive values
         env:
           TF_VAR_jwt_secret:             ${{ secrets.TF_VAR_JWT_SECRET }}
           TF_VAR_api_key:                ${{ secrets.TF_VAR_API_KEY }}
