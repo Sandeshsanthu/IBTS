@@ -42,7 +42,7 @@ jobs:
 
       # ── IAM Policies
       - name: Import IAM Policy - payment-switch
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
         run: |
           terraform import \
             aws_iam_policy.payment_switch \
@@ -50,7 +50,7 @@ jobs:
             && echo "✅ done" || echo "⏭️  already in state"
 
       - name: Import IAM Policy - payment-router
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
         run: |
           terraform import \
             aws_iam_policy.payment_router \
@@ -58,7 +58,7 @@ jobs:
             && echo "✅ done" || echo "⏭️  already in state"
 
       - name: Import IAM Policy - idempotency-guard
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
         run: |
           terraform import \
             aws_iam_policy.idempotency_guard \
@@ -67,7 +67,7 @@ jobs:
 
       # ── IAM Roles (IRSA)
       - name: Import IRSA Role - payment-switch
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
         run: |
           terraform import \
             'module.irsa_payment_switch.aws_iam_role.this[0]' \
@@ -75,7 +75,7 @@ jobs:
             && echo "✅ done" || echo "⏭️  already in state"
 
       - name: Import IRSA Role - payment-router
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
         run: |
           terraform import \
             'module.irsa_payment_router.aws_iam_role.this[0]' \
@@ -83,7 +83,7 @@ jobs:
             && echo "✅ done" || echo "⏭️  already in state"
 
       - name: Import IRSA Role - idempotency-guard
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
         run: |
           terraform import \
             'module.irsa_idempotency_guard.aws_iam_role.this[0]' \
@@ -92,7 +92,7 @@ jobs:
 
       # ── SQS Queue (already created successfully)
       - name: Import SQS Queue
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
         run: |
           terraform import \
             aws_sqs_queue.karpenter_interruption \
@@ -100,7 +100,7 @@ jobs:
             && echo "✅ done" || echo "⏭️  already in state"
 
       - name: Import SQS Queue Policy
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
         run: |
           terraform import \
             aws_sqs_queue_policy.karpenter_interruption \
@@ -108,7 +108,7 @@ jobs:
             && echo "✅ done" || echo "⏭️  already in state"
 
       - name: Show State List
-        working-directory: infra-aws/stage2-config
+        working-directory: infra-aws/inital/stage2-config
         run: |
           echo "══════════════════════════════════════"
           echo "STAGE2 STATE AFTER IMPORTS:"
