@@ -4,7 +4,7 @@
 aws_region              = "ap-south-2"
 environment             = "poc"
 cluster_name            = "ibts-eks"
-cluster_version         = "1.30"
+cluster_version         = "1.31"
 vpc_cidr                = "10.0.0.0/16"
 availability_zones      = ["ap-south-2a", "ap-south-2b"]
 private_subnet_cidrs    = ["10.0.10.0/24", "10.0.11.0/24"]
