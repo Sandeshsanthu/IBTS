@@ -104,6 +104,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       AWS_REGION: "ap-south-2"
+    # ✅ ADDED: sensitive vars injected from GitHub secrets
+    # Plan must see these so it can diff the secret + configmap correctly
+    # Without these plan will fail → "Variables not set"
+    # GitHub → Settings → Secrets → Actions:
+    #   TF_VAR_jwt_secret
+    #   TF_VAR_api_key
+    #   TF_VAR_grafana_admin_password
 
     steps:
       - uses: actions/checkout@v4
@@ -124,6 +131,11 @@ jobs:
         working-directory: infra-aws/inital/stage2-config
 
       - name: Plan
+        # ✅ ADDED: TF_VAR_ env vars for jwt_secret, api_key, grafana_admin_password
+        env:
+          TF_VAR_jwt_secret:             ${{ secrets.TF_VAR_JWT_SECRET }}
+          TF_VAR_api_key:                ${{ secrets.TF_VAR_API_KEY }}
+          TF_VAR_grafana_admin_password: ${{ secrets.TF_VAR_GRAFANA_ADMIN_PASSWORD }}
         run: terraform plan -refresh=true -out=tfplan-stage2
         working-directory: infra-aws/inital/stage2-config
 
@@ -169,5 +181,11 @@ jobs:
           path: infra-aws/inital/stage2-config
 
       - name: Apply
+        # ✅ ADDED: TF_VAR_ env vars required at apply time
+        # even though plan is pre-baked, apply re-evaluates sensitive values
+        env:
+          TF_VAR_jwt_secret:             ${{ secrets.TF_VAR_JWT_SECRET }}
+          TF_VAR_api_key:                ${{ secrets.TF_VAR_API_KEY }}
+          TF_VAR_grafana_admin_password: ${{ secrets.TF_VAR_GRAFANA_ADMIN_PASSWORD }}
         run: terraform apply -input=false tfplan-stage2
         working-directory: infra-aws/inital/stage2-config

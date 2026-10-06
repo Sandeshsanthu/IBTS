@@ -35,3 +35,24 @@ variable "karpenter_spot_instance_sizes" {
   type    = list(string)
   default = ["medium", "large"]
 }
+
+variable "jwt_secret" {
+  description = "JWT signing secret — set via TF_VAR_jwt_secret in CI"
+  type        = string
+  sensitive   = true
+  default     = "ibts-dev-secret-change-in-prod"
+}
+
+variable "api_key" {
+  description = "API key for api-gateway — set via TF_VAR_api_key in CI"
+  type        = string
+  sensitive   = true
+  default     = "ibts-api-key-dev"
+}
+
+variable "grafana_admin_password" {
+  description = "Grafana admin password — set via TF_VAR_grafana_admin_password in CI"
+  type        = string
+  sensitive   = true
+  default     = "ibts-grafana-dev"
+}

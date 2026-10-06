@@ -79,3 +79,5 @@ resource "kubernetes_service_account" "idempotency_guard" {
   }
   depends_on = [kubernetes_namespace.ibts_app]
 }
+
+
