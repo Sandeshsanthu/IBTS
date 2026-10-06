@@ -15,16 +15,14 @@ module "eks" {
 
   enable_irsa = true
 
-  # ✅ STEP 1: Enable the API access entries feature (CRITICAL FIX)
+  # ✅ KEEP THIS: Switches authentication mode to handle API entries
   authentication_mode = "API_AND_CONFIG_MAP"
 
-  # ✅ STEP 2: Restore this flag. It prevents Stage 1 from locking itself 
-  # out during creation, and works alongside your access_entries block.
+  # ✅ KEEP THIS: Natively maps your GitHub Actions role as cluster admin
   enable_cluster_creator_admin_permissions = true
 
   cluster_enabled_log_types = ["api", "audit"]
-
-  cluster_addons = {}
+  cluster_addons             = {}
 
   node_security_group_additional_rules = {
     ingress_self_all = {
@@ -37,21 +35,9 @@ module "eks" {
     }
   }
 
-  # ✅ Valid explicit entry for the pipeline role across all future sessions
-  access_entries = {
-    github_actions = {
-      principal_arn = "arn:aws:iam::149614785419:role/github-actions-terraform-role"
-
-      policy_associations = {
-        admin = {
-          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = {
-            type = "cluster"
-          }
-        }
-      }
-    }
-  }
+  # ❌ REMOVED: Your custom github_actions map block has been removed 
+  # to prevent the duplicate 409 ResourceInUseException.
+  access_entries = {} 
 
   tags = {
     "karpenter.sh/discovery" = var.cluster_name

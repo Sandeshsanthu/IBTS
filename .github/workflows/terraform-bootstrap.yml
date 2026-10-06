@@ -171,19 +171,17 @@ jobs:
           echo "══════════════════════════════════════"
 
 
-      - name: Import EKS Access Entry - github_actions
+      - name: Reconcile EKS Cluster Creator Access Entry
         working-directory: infra-aws/inital/stage1-cluster
         run: |
+          # 1. Clean out the old custom configuration keys from state if they exist
+          terraform state rm 'module.eks.aws_eks_access_entry.this["github_actions"]' || true
+          terraform state rm 'module.eks.aws_eks_access_policy_association.this["github_actions_admin"]' || true
+          
+          # 2. Import the cluster_creator entry that AWS already has registered
           terraform import \
-            'module.eks.aws_eks_access_entry.this["github_actions"]' \
+            'module.eks.aws_eks_access_entry.this["cluster_creator"]' \
             'ibts-eks:arn:aws:iam::149614785419:role/github-actions-terraform-role' \
-            && echo "✅ done" || echo "⏭️  already in state"
+            && echo "✅ Creator Entry Imported" || echo "⏭️ Already tracked"
 
-      # 🔥 NEW: Import the EKS Access Policy Association to avoid ResourceInUseException
-      - name: Import EKS Access Policy Association - admin
-        working-directory: infra-aws/inital/stage1-cluster
-        run: |
-          terraform import \
-            'module.eks.aws_eks_access_policy_association.this["github_actions_admin"]' \
-            'ibts-eks:arn:aws:iam::149614785419:role/github-actions-terraform-role:arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy' \
-            && echo "✅ done" || echo "⏭️  already in state"
+
