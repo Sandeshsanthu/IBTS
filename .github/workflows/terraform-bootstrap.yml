@@ -42,14 +42,29 @@ jobs:
         run: terraform init
         working-directory: infra-aws/inital/stage1-cluster
 
-      # ── EKS Access Entry
-      # The github_actions access entry was already created
-      # in AWS from a previous partial run — import it
-      - name: Import EKS Access Entry - github_actions
+      # ── Clean stale keys from previous partial runs
+      # Must run before import to avoid key conflicts
+      - name: Remove Stale Access Entry Keys From State
+        working-directory: infra-aws/inital/stage1-cluster
+        run: |
+          terraform state rm \
+            'module.eks.aws_eks_access_entry.this["github_actions"]' \
+            2>/dev/null && echo "✅ removed github_actions key" \
+            || echo "⏭️  github_actions key not in state"
+
+          terraform state rm \
+            'module.eks.aws_eks_access_policy_association.this["github_actions_admin"]' \
+            2>/dev/null && echo "✅ removed github_actions_admin association" \
+            || echo "⏭️  association not in state"
+
+      # ── FIX: key is "cluster_creator" not "github_actions"
+      # enable_cluster_creator_admin_permissions = true makes AWS
+      # register the entry under the "cluster_creator" key internally
+      - name: Import EKS Access Entry - cluster_creator
         working-directory: infra-aws/inital/stage1-cluster
         run: |
           terraform import \
-            'module.eks.aws_eks_access_entry.this["github_actions"]' \
+            'module.eks.aws_eks_access_entry.this["cluster_creator"]' \
             'ibts-eks:arn:aws:iam::149614785419:role/github-actions-terraform-role' \
             && echo "✅ done" || echo "⏭️  already in state"
 
@@ -63,7 +78,7 @@ jobs:
 
   # ════════════════════════════════════════
   # STAGE 2 IMPORTS
-  # Runs after stage1 imports complete
+  # Separate job — own terraform init, own state backend
   # ════════════════════════════════════════
   import-stage2:
     name: "Import Existing Resources Into Stage2 State"
@@ -162,6 +177,12 @@ jobs:
             https://sqs.ap-south-2.amazonaws.com/149614785419/ibts-eks-karpenter-interruption \
             && echo "✅ done" || echo "⏭️  already in state"
 
+      # ── FIX: removed misplaced "Reconcile" step that was here
+      # It pointed to stage1-cluster directory but this job only
+      # ran terraform init for stage2-config — no state backend
+      # connection for stage1 exists in this job → silent failure
+      # All stage1 imports are handled correctly in import-stage1 job above
+
       - name: Show Stage2 State List
         working-directory: infra-aws/inital/stage2-config
         run: |
@@ -169,19 +190,3 @@ jobs:
           echo "STAGE2 STATE AFTER IMPORTS:"
           terraform state list
           echo "══════════════════════════════════════"
-
-
-      - name: Reconcile EKS Cluster Creator Access Entry
-        working-directory: infra-aws/inital/stage1-cluster
-        run: |
-          # 1. Clean out the old custom configuration keys from state if they exist
-          terraform state rm 'module.eks.aws_eks_access_entry.this["github_actions"]' || true
-          terraform state rm 'module.eks.aws_eks_access_policy_association.this["github_actions_admin"]' || true
-          
-          # 2. Import the cluster_creator entry that AWS already has registered
-          terraform import \
-            'module.eks.aws_eks_access_entry.this["cluster_creator"]' \
-            'ibts-eks:arn:aws:iam::149614785419:role/github-actions-terraform-role' \
-            && echo "✅ Creator Entry Imported" || echo "⏭️ Already tracked"
-
-
