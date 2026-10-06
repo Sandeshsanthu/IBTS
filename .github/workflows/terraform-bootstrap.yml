@@ -107,6 +107,14 @@ jobs:
             https://sqs.ap-south-2.amazonaws.com/149614785419/ibts-eks-karpenter-interruption \
             && echo "✅ done" || echo "⏭️  already in state"
 
+      - name: Import cluster_creator Access Entry
+        working-directory: infra-aws/inital/stage1-cluster
+        run: |
+          terraform import \
+            'module.eks.aws_eks_access_entry.this["cluster_creator"]' \
+            'ibts-eks:arn:aws:iam::149614785419:role/github-actions-terraform-role' \
+            && echo "✅ done" || echo "⏭️  already in state"
+
       - name: Show State List
         working-directory: infra-aws/inital/stage2-config
         run: |

@@ -16,9 +16,13 @@ module "eks" {
 
   enable_irsa = true
 
-  # ✅ ADDED: Grants cluster admin to the IAM principal that
-  # runs terraform apply — covers the stage1 creation session
-  enable_cluster_creator_admin_permissions = true
+  # ❌ REMOVED: enable_cluster_creator_admin_permissions = true
+  # This flag auto-creates an access entry for the role running
+  # Terraform — which IS github-actions-terraform-role
+  # The access_entries block below creates one for the same ARN
+  # → duplicate → 409 ResourceInUseException
+  # The explicit access_entries block is better — it is permanent
+  # and survives across all pipeline sessions, not just the creator
 
   cluster_enabled_log_types = ["api", "audit"]
 
@@ -35,10 +39,7 @@ module "eks" {
     }
   }
 
-  # ✅ Explicit access entry for GitHub Actions role
-  # enable_cluster_creator_admin_permissions covers the session
-  # that creates the cluster but NOT subsequent pipeline runs
-  # This access_entry covers ALL future sessions of this role
+  # ✅ Single access entry — covers all sessions of this role
   access_entries = {
     github_actions = {
       principal_arn = "arn:aws:iam::149614785419:role/github-actions-terraform-role"
