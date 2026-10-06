@@ -1,5 +1,5 @@
 # filename: infra-aws/stage1-cluster/03-eks-cluster.tf
-
+#for dummys
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.11"
@@ -35,8 +35,7 @@ module "eks" {
     }
   }
 
-  # ❌ REMOVED: Your custom github_actions map block has been removed 
-  # to prevent the duplicate 409 ResourceInUseException.
+
   access_entries = {} 
 
   tags = {
