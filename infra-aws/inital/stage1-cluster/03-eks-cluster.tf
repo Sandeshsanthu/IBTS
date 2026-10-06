@@ -16,10 +16,12 @@ module "eks" {
 
   enable_irsa = true
 
+  # ✅ ADDED: Grants cluster admin to the IAM principal that
+  # runs terraform apply — covers the stage1 creation session
+  enable_cluster_creator_admin_permissions = true
+
   cluster_enabled_log_types = ["api", "audit"]
 
-  # ✅ No addons here — addons need OIDC which needs cluster
-  # Addons go in stage2 after cluster + OIDC exist
   cluster_addons = {}
 
   node_security_group_additional_rules = {
@@ -30,6 +32,25 @@ module "eks" {
       to_port     = 0
       type        = "ingress"
       self        = true
+    }
+  }
+
+  # ✅ Explicit access entry for GitHub Actions role
+  # enable_cluster_creator_admin_permissions covers the session
+  # that creates the cluster but NOT subsequent pipeline runs
+  # This access_entry covers ALL future sessions of this role
+  access_entries = {
+    github_actions = {
+      principal_arn = "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
     }
   }
 
