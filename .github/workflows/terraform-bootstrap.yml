@@ -169,3 +169,21 @@ jobs:
           echo "STAGE2 STATE AFTER IMPORTS:"
           terraform state list
           echo "══════════════════════════════════════"
+
+
+      - name: Import EKS Access Entry - github_actions
+        working-directory: infra-aws/inital/stage1-cluster
+        run: |
+          terraform import \
+            'module.eks.aws_eks_access_entry.this["github_actions"]' \
+            'ibts-eks:arn:aws:iam::149614785419:role/github-actions-terraform-role' \
+            && echo "✅ done" || echo "⏭️  already in state"
+
+      # 🔥 NEW: Import the EKS Access Policy Association to avoid ResourceInUseException
+      - name: Import EKS Access Policy Association - admin
+        working-directory: infra-aws/inital/stage1-cluster
+        run: |
+          terraform import \
+            'module.eks.aws_eks_access_policy_association.this["github_actions_admin"]' \
+            'ibts-eks:arn:aws:iam::149614785419:role/github-actions-terraform-role:arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy' \
+            && echo "✅ done" || echo "⏭️  already in state"
