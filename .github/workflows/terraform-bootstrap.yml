@@ -11,8 +11,63 @@ permissions:
   contents: read
 
 jobs:
+  # ════════════════════════════════════════
+  # STAGE 1 IMPORTS
+  # ════════════════════════════════════════
+  import-stage1:
+    name: "Import Existing Resources Into Stage1 State"
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: "ap-south-2"
+      CLUSTER_NAME: "ibts-eks"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4.2.2
+
+      - name: Authenticate with AWS via OIDC
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        with:
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "TerraformBootstrapStage1"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3.1.2
+        with:
+          terraform_version: "1.10.5"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: infra-aws/inital/stage1-cluster
+
+      # ── EKS Access Entry
+      # The github_actions access entry was already created
+      # in AWS from a previous partial run — import it
+      - name: Import EKS Access Entry - github_actions
+        working-directory: infra-aws/inital/stage1-cluster
+        run: |
+          terraform import \
+            'module.eks.aws_eks_access_entry.this["github_actions"]' \
+            'ibts-eks:arn:aws:iam::149614785419:role/github-actions-terraform-role' \
+            && echo "✅ done" || echo "⏭️  already in state"
+
+      - name: Show Stage1 State List
+        working-directory: infra-aws/inital/stage1-cluster
+        run: |
+          echo "══════════════════════════════════════"
+          echo "STAGE1 STATE AFTER IMPORTS:"
+          terraform state list
+          echo "══════════════════════════════════════"
+
+  # ════════════════════════════════════════
+  # STAGE 2 IMPORTS
+  # Runs after stage1 imports complete
+  # ════════════════════════════════════════
   import-stage2:
-    name: "Import Existing IAM Resources Into Stage2 State"
+    name: "Import Existing Resources Into Stage2 State"
+    needs: import-stage1
     runs-on: ubuntu-latest
     env:
       AWS_REGION: "ap-south-2"
@@ -28,7 +83,7 @@ jobs:
         with:
           role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: "TerraformBootstrap"
+          role-session-name: "TerraformBootstrapStage2"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3.1.2
@@ -90,7 +145,7 @@ jobs:
             ibts-eks-idempotency-guard \
             && echo "✅ done" || echo "⏭️  already in state"
 
-      # ── SQS Queue (already created successfully)
+      # ── SQS Queue
       - name: Import SQS Queue
         working-directory: infra-aws/inital/stage2-config
         run: |
@@ -107,15 +162,7 @@ jobs:
             https://sqs.ap-south-2.amazonaws.com/149614785419/ibts-eks-karpenter-interruption \
             && echo "✅ done" || echo "⏭️  already in state"
 
-      - name: Import cluster_creator Access Entry
-        working-directory: infra-aws/inital/stage1-cluster
-        run: |
-          terraform import \
-            'module.eks.aws_eks_access_entry.this["cluster_creator"]' \
-            'ibts-eks:arn:aws:iam::149614785419:role/github-actions-terraform-role' \
-            && echo "✅ done" || echo "⏭️  already in state"
-
-      - name: Show State List
+      - name: Show Stage2 State List
         working-directory: infra-aws/inital/stage2-config
         run: |
           echo "══════════════════════════════════════"
