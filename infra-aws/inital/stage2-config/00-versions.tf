@@ -49,8 +49,7 @@ provider "aws" {
 
 # ══════════════════════════════════════════════════════
 # READ STAGE 1 OUTPUTS
-# Cluster is guaranteed to exist before this stage runs
-# No try() needed — stage2 never runs without stage1
+# Cluster guaranteed to exist — stage2 runs after stage1
 # ══════════════════════════════════════════════════════
 data "terraform_remote_state" "stage1" {
   backend = "s3"
@@ -61,39 +60,67 @@ data "terraform_remote_state" "stage1" {
   }
 }
 
-# Read auth token directly from AWS API
-# Cluster exists at this point so this never fails
-data "aws_eks_cluster_auth" "this" {
-  name = data.terraform_remote_state.stage1.outputs.cluster_name
-}
-
 locals {
+  cluster_name     = data.terraform_remote_state.stage1.outputs.cluster_name
   cluster_endpoint = data.terraform_remote_state.stage1.outputs.cluster_endpoint
   cluster_ca       = base64decode(
     data.terraform_remote_state.stage1.outputs.cluster_certificate_authority_data
   )
-  cluster_token = data.aws_eks_cluster_auth.this.token
 }
 
-# ── Providers — all read from stage1 remote state
-# No module outputs, no chicken-and-egg problem
+# ══════════════════════════════════════════════════════
+# PROVIDERS — use exec instead of static token
+#
+# WHY exec and NOT aws_eks_cluster_auth data source:
+#   aws_eks_cluster_auth token expires after 15 minutes
+#   Long applies (20+ mins) hit "Unauthorized" errors
+#   exec fetches a FRESH token on every single API call
+#   → never expires mid-apply
+# ══════════════════════════════════════════════════════
 provider "kubernetes" {
   host                   = local.cluster_endpoint
   cluster_ca_certificate = local.cluster_ca
-  token                  = local.cluster_token
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = [
+      "eks", "get-token",
+      "--cluster-name", local.cluster_name,
+      "--region", var.aws_region
+    ]
+  }
 }
 
 provider "helm" {
   kubernetes {
     host                   = local.cluster_endpoint
     cluster_ca_certificate = local.cluster_ca
-    token                  = local.cluster_token
+
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args = [
+        "eks", "get-token",
+        "--cluster-name", local.cluster_name,
+        "--region", var.aws_region
+      ]
+    }
   }
 }
 
 provider "kubectl" {
   host                   = local.cluster_endpoint
   cluster_ca_certificate = local.cluster_ca
-  token                  = local.cluster_token
   load_config_file       = false
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args = [
+      "eks", "get-token",
+      "--cluster-name", local.cluster_name,
+      "--region", var.aws_region
+    ]
+  }
 }
