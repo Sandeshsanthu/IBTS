@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   # ════════════════════════════════════════
-  # STAGE 1 PLAN — VPC + EKS cluster only
+  # STAGE 1 PLAN
   # ════════════════════════════════════════
   stage1-plan:
     name: "Stage 1 Plan (Cluster)"
@@ -56,7 +56,7 @@ jobs:
           retention-days: 1
 
   # ════════════════════════════════════════
-  # STAGE 1 APPLY — creates cluster
+  # STAGE 1 APPLY
   # ════════════════════════════════════════
   stage1-apply:
     name: "Stage 1 Apply (Cluster)"
@@ -162,39 +162,40 @@ jobs:
           terraform_version: "1.10.5"
           terraform_wrapper: false
 
-      # ✅ ADDED: configure kubectl so helm commands work in pipeline
+      - name: Init
+        run: terraform init
+        working-directory: infra-aws/inital/stage2-config
+
+      # ✅ FIX: Init runs first — then configure kubectl
+      # terraform init must complete before any terraform commands
+      # cluster name read directly from AWS — no terraform output needed
       - name: Configure kubectl
         run: |
           aws eks update-kubeconfig \
             --region ${{ env.AWS_REGION }} \
-            --name $(terraform -chdir=infra-aws/inital/stage2-config output -raw cluster_name 2>/dev/null || \
-                     aws eks list-clusters --region ${{ env.AWS_REGION }} \
-                       --query 'clusters[0]' --output text)
+            --name $(aws eks list-clusters \
+                       --region ${{ env.AWS_REGION }} \
+                       --query 'clusters[0]' \
+                       --output text)
 
-      # ✅ ADDED: clean up failed Helm releases before apply
-      # --ignore-not-found → safe to run even on first deploy
-      # only uninstalls releases that are in failed/pending state
-      # healthy releases are left untouched by helm uninstall
-      - name: Cleanup failed Helm releases
+      # ✅ FIX: only clean Karpenter — the one Helm release still in Terraform
+      # observability releases (prometheus, elasticsearch, etc.) were moved
+      # out of Terraform into deploy-observability job — do not touch them here
+      - name: Cleanup failed Karpenter release
         run: |
-          # Install helm (already available on ubuntu-latest)
-          # Uninstall only if release exists in failed state
-          for release in kube-prometheus-stack elasticsearch otel-collector kibana jaeger fluent-bit; do
-            STATUS=$(helm status $release -n ibts-observability --output json 2>/dev/null \
-                       | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['status'])" \
-                       2>/dev/null || echo "not-found")
+          STATUS=$(helm status karpenter -n kube-system --output json 2>/dev/null \
+                     | python3 -c "import sys,json; \
+                         print(json.load(sys.stdin)['info']['status'])" \
+                     2>/dev/null || echo "not-found")
 
-            if [[ "$STATUS" == "failed" || "$STATUS" == "pending-install" || "$STATUS" == "pending-upgrade" ]]; then
-              echo "Uninstalling failed release: $release (status: $STATUS)"
-              helm uninstall $release -n ibts-observability
-            else
-              echo "Release $release status: $STATUS — skipping"
-            fi
-          done
-
-      - name: Init
-        run: terraform init
-        working-directory: infra-aws/inital/stage2-config
+          if [[ "$STATUS" == "failed" || \
+                "$STATUS" == "pending-install" || \
+                "$STATUS" == "pending-upgrade" ]]; then
+            echo "Uninstalling karpenter (status: $STATUS)"
+            helm uninstall karpenter -n kube-system --ignore-not-found
+          else
+            echo "Karpenter status: $STATUS — skipping"
+          fi
 
       - uses: actions/download-artifact@v4
         with:
@@ -208,3 +209,42 @@ jobs:
           TF_VAR_grafana_admin_password: ${{ secrets.TF_VAR_GRAFANA_ADMIN_PASSWORD }}
         run: terraform apply -input=false tfplan-stage2
         working-directory: infra-aws/inital/stage2-config
+
+  # ════════════════════════════════════════
+  # OBSERVABILITY DEPLOY
+  # ✅ ADDED: was missing from this version
+  # Runs after Terraform is green
+  # Uses Helm CLI directly — not Terraform
+  # kube-prometheus-stack webhook timeouts
+  # only happen inside Terraform provider
+  # plain helm install has no such constraint
+  # ════════════════════════════════════════
+  deploy-observability:
+    name: "Deploy Observability Stack"
+    needs: stage2-apply
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_REGION: "ap-south-2"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "DeployObservability"
+
+      - name: Deploy observability stack
+        env:
+          TF_VAR_grafana_admin_password: ${{ secrets.TF_VAR_GRAFANA_ADMIN_PASSWORD }}
+        run: |
+          chmod +x scripts/deploy-observability.sh
+          ./scripts/deploy-observability.sh \
+            $(aws eks list-clusters \
+                --region ${{ env.AWS_REGION }} \
+                --query 'clusters[0]' \
+                --output text) \
+            ${{ env.AWS_REGION }}

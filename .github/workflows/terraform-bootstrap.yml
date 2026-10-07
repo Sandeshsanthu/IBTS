@@ -42,8 +42,6 @@ jobs:
         run: terraform init
         working-directory: infra-aws/inital/stage1-cluster
 
-      # ── Clean stale keys from previous partial runs
-      # Must run before import to avoid key conflicts
       - name: Remove Stale Access Entry Keys From State
         working-directory: infra-aws/inital/stage1-cluster
         run: |
@@ -57,9 +55,6 @@ jobs:
             2>/dev/null && echo "✅ removed github_actions_admin association" \
             || echo "⏭️  association not in state"
 
-      # ── FIX: key is "cluster_creator" not "github_actions"
-      # enable_cluster_creator_admin_permissions = true makes AWS
-      # register the entry under the "cluster_creator" key internally
       - name: Import EKS Access Entry - cluster_creator
         working-directory: infra-aws/inital/stage1-cluster
         run: |
@@ -78,7 +73,6 @@ jobs:
 
   # ════════════════════════════════════════
   # STAGE 2 IMPORTS
-  # Separate job — own terraform init, own state backend
   # ════════════════════════════════════════
   import-stage2:
     name: "Import Existing Resources Into Stage2 State"
@@ -135,7 +129,7 @@ jobs:
             arn:aws:iam::149614785419:policy/ibts-eks-idempotency-guard-policy \
             && echo "✅ done" || echo "⏭️  already in state"
 
-      # ── IAM Roles (IRSA)
+      # ── IRSA Roles (app services)
       - name: Import IRSA Role - payment-switch
         working-directory: infra-aws/inital/stage2-config
         run: |
@@ -160,28 +154,82 @@ jobs:
             ibts-eks-idempotency-guard \
             && echo "✅ done" || echo "⏭️  already in state"
 
-      # ── SQS Queue
-      - name: Import SQS Queue
+      # ── Karpenter IRSA role
+      # ✅ ADDED: was failing with EntityAlreadyExists in main pipeline
+      - name: Import IRSA Role - karpenter-controller
+        working-directory: infra-aws/inital/stage2-config
+        run: |
+          terraform import \
+            'module.karpenter_irsa.aws_iam_role.this[0]' \
+            ibts-eks-karpenter-controller \
+            && echo "✅ done" || echo "⏭️  already in state"
+
+      # ── Karpenter node IAM role
+      # ✅ ADDED: created by previous failed run, not in state
+      - name: Import IAM Role - karpenter-node
+        working-directory: infra-aws/inital/stage2-config
+        run: |
+          terraform import \
+            aws_iam_role.karpenter_node \
+            ibts-eks-karpenter-node \
+            && echo "✅ done" || echo "⏭️  already in state"
+
+      # ── Karpenter node instance profile
+      # ✅ ADDED: created alongside node role, must import separately
+      - name: Import IAM Instance Profile - karpenter-node
+        working-directory: infra-aws/inital/stage2-config
+        run: |
+          terraform import \
+            aws_iam_instance_profile.karpenter_node \
+            ibts-eks-karpenter-node \
+            && echo "✅ done" || echo "⏭️  already in state"
+
+      # ── Karpenter SQS queue
+      # ✅ FIXED: queue name is ibts-eks-karpenter NOT ibts-eks-karpenter-interruption
+      # Confirmed from pipeline log:
+      #   aws_sqs_queue_policy.karpenter_interruption: Creation complete
+      #   [id=https://sqs.ap-south-2.amazonaws.com/149614785419/ibts-eks-karpenter]
+      - name: Import SQS Queue - karpenter
         working-directory: infra-aws/inital/stage2-config
         run: |
           terraform import \
             aws_sqs_queue.karpenter_interruption \
-            https://sqs.ap-south-2.amazonaws.com/149614785419/ibts-eks-karpenter-interruption \
+            https://sqs.ap-south-2.amazonaws.com/149614785419/ibts-eks-karpenter \
             && echo "✅ done" || echo "⏭️  already in state"
 
-      - name: Import SQS Queue Policy
+      - name: Import SQS Queue Policy - karpenter
         working-directory: infra-aws/inital/stage2-config
         run: |
           terraform import \
             aws_sqs_queue_policy.karpenter_interruption \
-            https://sqs.ap-south-2.amazonaws.com/149614785419/ibts-eks-karpenter-interruption \
+            https://sqs.ap-south-2.amazonaws.com/149614785419/ibts-eks-karpenter \
             && echo "✅ done" || echo "⏭️  already in state"
 
-      # ── FIX: removed misplaced "Reconcile" step that was here
-      # It pointed to stage1-cluster directory but this job only
-      # ran terraform init for stage2-config — no state backend
-      # connection for stage1 exists in this job → silent failure
-      # All stage1 imports are handled correctly in import-stage1 job above
+      # ── EventBridge rules
+      # ✅ ADDED: created by previous runs, may not be in state
+      - name: Import EventBridge Rule - karpenter-spot
+        working-directory: infra-aws/inital/stage2-config
+        run: |
+          terraform import \
+            aws_cloudwatch_event_rule.karpenter_interruption_spot \
+            ibts-eks-karpenter-spot \
+            && echo "✅ done" || echo "⏭️  already in state"
+
+      - name: Import EventBridge Rule - karpenter-rebalance
+        working-directory: infra-aws/inital/stage2-config
+        run: |
+          terraform import \
+            aws_cloudwatch_event_rule.karpenter_rebalance \
+            ibts-eks-karpenter-rebalance \
+            && echo "✅ done" || echo "⏭️  already in state"
+
+      - name: Import EventBridge Rule - karpenter-instance-state
+        working-directory: infra-aws/inital/stage2-config
+        run: |
+          terraform import \
+            aws_cloudwatch_event_rule.karpenter_instance_state \
+            ibts-eks-karpenter-instance-state \
+            && echo "✅ done" || echo "⏭️  already in state"
 
       - name: Show Stage2 State List
         working-directory: infra-aws/inital/stage2-config
