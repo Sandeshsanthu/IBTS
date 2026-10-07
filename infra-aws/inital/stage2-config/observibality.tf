@@ -8,11 +8,18 @@ locals {
 # ══════════════════════════════════════════════════════
 # PROMETHEUS + GRAFANA + ALERTMANAGER
 #
-# FIX: timeout increased 600 → 900
-#      atomic = false → don't auto-rollback on timeout
-#        (keeps partial install so you can debug)
-#      cleanup_on_fail = false → don't delete on failure
-#        (avoids leaving cluster in broken CRD state)
+# FIX: disabled admission webhooks
+#
+# kube-prometheus-stack runs a pre-install Job to generate
+# TLS certs for its ValidatingWebhookConfiguration.
+# That Job cannot schedule fast enough in CI → hook times out
+# → entire release fails before any pod is created
+#
+# admissionWebhooks.enabled = false
+#   → skips pre-install + pre-delete hook Jobs entirely
+#   → no ValidatingWebhookConfiguration created
+#   → prometheus still works 100% — webhooks only validate
+#     PrometheusRule CRDs (nice to have, not required)
 # ══════════════════════════════════════════════════════
 
 resource "helm_release" "kube_prometheus_stack" {
@@ -22,11 +29,28 @@ resource "helm_release" "kube_prometheus_stack" {
   chart            = "kube-prometheus-stack"
   version          = "58.2.2"
   create_namespace = false
-  timeout          = 900          # ✅ INCREASED: 600 → 900 (15 min)
-  atomic           = false        # ✅ ADDED: don't rollback on timeout
-  cleanup_on_fail  = false        # ✅ ADDED: keep partial install for debug
+  timeout          = 900
+  atomic           = false
+  cleanup_on_fail  = false
 
   values = [yamlencode({
+    prometheusOperator = {
+      admissionWebhooks = {
+        # ✅ KEY FIX: disables the pre-install Job that was timing out
+        # The Job tries to create a TLS cert via a pod
+        # Pod cannot schedule fast enough in pipeline → hook timeout
+        # Disabling this skips the hook entirely
+        enabled = false
+        patch = {
+          enabled = false
+        }
+      }
+      # Don't request high resources for the operator itself
+      resources = {
+        requests = { cpu = "50m", memory = "64Mi" }
+        limits   = { cpu = "200m", memory = "256Mi" }
+      }
+    }
     prometheus = {
       prometheusSpec = {
         retention = "30d"
@@ -35,6 +59,14 @@ resource "helm_release" "kube_prometheus_stack" {
         resources = {
           requests = { cpu = "200m", memory = "512Mi" }
           limits   = { cpu = "500m", memory = "1Gi" }
+        }
+        storageSpec = {
+          volumeClaimTemplate = {
+            spec = {
+              storageClassName = "gp3"
+              resources = { requests = { storage = "10Gi" } }
+            }
+          }
         }
       }
     }
@@ -69,19 +101,16 @@ resource "helm_release" "kube_prometheus_stack" {
         }
       }
     }
-    # kubelet metrics → replaces cAdvisor container
     kubelet = {
       enabled        = true
       serviceMonitor = { cAdvisor = true }
     }
-    # node-exporter resource limits
     prometheus-node-exporter = {
       resources = {
         requests = { cpu = "10m", memory = "32Mi" }
         limits   = { cpu = "100m", memory = "64Mi" }
       }
     }
-    # kube-state-metrics resource limits
     kube-state-metrics = {
       resources = {
         requests = { cpu = "10m", memory = "64Mi" }
@@ -95,9 +124,6 @@ resource "helm_release" "kube_prometheus_stack" {
 
 # ══════════════════════════════════════════════════════
 # ELASTICSEARCH
-#
-# FIX: timeout increased 600 → 900
-#      storageClassName explicitly set to gp3
 # ══════════════════════════════════════════════════════
 
 resource "helm_release" "elasticsearch" {
@@ -107,7 +133,7 @@ resource "helm_release" "elasticsearch" {
   chart            = "elasticsearch"
   version          = "8.5.1"
   create_namespace = false
-  timeout          = 900          # ✅ INCREASED: 600 → 900
+  timeout          = 900
   atomic           = false
   cleanup_on_fail  = false
 
@@ -120,7 +146,7 @@ resource "helm_release" "elasticsearch" {
       limits   = { cpu = "1000m", memory = "1.5Gi" }
     }
     volumeClaimTemplate = {
-      storageClassName = "gp3"    # ✅ ADDED: explicit storage class
+      storageClassName = "gp3"
       resources = { requests = { storage = "10Gi" } }
     }
     esConfig = {
@@ -128,7 +154,9 @@ resource "helm_release" "elasticsearch" {
     }
   })]
 
-  depends_on = [kubernetes_namespace.ibts_observability]
+  # ✅ Explicit depends_on — only starts after prometheus stack
+  # avoids race condition where both try to schedule large pods simultaneously
+  depends_on = [helm_release.kube_prometheus_stack]
 }
 
 # ══════════════════════════════════════════════════════
@@ -158,9 +186,7 @@ resource "helm_release" "kibana" {
 # ══════════════════════════════════════════════════════
 # OTEL COLLECTOR
 #
-# FIX: image.repository now explicitly declared
-#      breaking change in chart v0.91.0 — was removed
-#      from defaults and must be set manually
+# FIX: image.repository explicitly declared (breaking change v0.91.0)
 # ══════════════════════════════════════════════════════
 
 resource "helm_release" "otel_collector" {
@@ -175,9 +201,7 @@ resource "helm_release" "otel_collector" {
   values = [yamlencode({
     mode = "deployment"
 
-    # ✅ ADDED: required since chart v0.91.0
-    # image.repository removed from chart defaults
-    # must be explicitly declared
+    # ✅ Required since chart v0.91.0 — removed from defaults
     image = {
       repository = "otel/opentelemetry-collector-contrib"
     }
@@ -216,20 +240,19 @@ resource "helm_release" "otel_collector" {
         }
       }
     }
-
     ports = {
       otlp      = { enabled = true, containerPort = 4317, servicePort = 4317 }
       otlp-http = { enabled = true, containerPort = 4318, servicePort = 4318 }
       metrics   = { enabled = true, containerPort = 8889, servicePort = 8889 }
     }
-
     resources = {
       requests = { cpu = "50m", memory = "128Mi" }
       limits   = { cpu = "200m", memory = "256Mi" }
     }
   })]
 
-  depends_on = [kubernetes_namespace.ibts_observability]
+  # ✅ Waits for prometheus stack — avoids parallel scheduling pressure
+  depends_on = [helm_release.kube_prometheus_stack]
 }
 
 # ══════════════════════════════════════════════════════
