@@ -127,7 +127,7 @@ module "karpenter_irsa" {
   role_name                          = "${var.cluster_name}-karpenter-controller"
   attach_karpenter_controller_policy = true
 
-  karpenter_controller_cluster_id       = var.cluster_name
+  karpenter_controller_cluster_id         = var.cluster_name
   karpenter_controller_node_iam_role_arns = [aws_iam_role.karpenter_node.arn]
 
   oidc_providers = {
@@ -149,13 +149,11 @@ resource "kubernetes_service_account" "karpenter" {
   }
 }
 
-# ✅ ADDED: wait for ALB controller webhook to become ready
-# The ALB controller registers a MutatingWebhookConfiguration
-# that intercepts ALL Service mutations in the cluster.
-# Karpenter creates a Service during install — if that webhook
-# has no ready endpoints the install fails with:
-# "no endpoints available for aws-load-balancer-webhook-service"
-# 60s is enough for the ALB controller pod to pass readiness probe.
+# ── Wait for ALB controller webhook to become ready before Karpenter
+# ALB controller registers a MutatingWebhookConfiguration that intercepts
+# ALL Service mutations cluster-wide. Karpenter creates a Service during
+# install. If ALB webhook pod is not ready yet → no endpoints →
+# Karpenter install fails. 60s is enough for ALB pod to pass readiness.
 resource "time_sleep" "wait_for_alb_webhook" {
   create_duration = "60s"
   depends_on      = [helm_release.aws_lb_controller]
@@ -168,6 +166,15 @@ resource "helm_release" "karpenter" {
   repository = "oci://public.ecr.aws/karpenter"
   chart      = "karpenter"
   version    = var.karpenter_version
+
+  # ✅ ADDED: explicit timeout
+  # Default Terraform helm provider timeout = 300s (5 min)
+  # Pipeline failed at exactly 5m10s → was hitting the default
+  # Karpenter image pull + pod start + readiness = ~4-5 min
+  # 600s gives 2x the headroom needed
+  timeout         = 600
+  atomic          = false   # don't auto-rollback — keep release for debug
+  cleanup_on_fail = false   # don't delete on failure
 
   values = [yamlencode({
     serviceAccount = {
@@ -193,15 +200,15 @@ resource "helm_release" "karpenter" {
     }
   })]
 
-  # ✅ KEY FIX: wait for ALB webhook before Karpenter installs
-  # Without this Karpenter fails with webhook no endpoints error
   depends_on = [
     kubernetes_service_account.karpenter,
     time_sleep.wait_for_alb_webhook
   ]
 }
 
-# ── 90s after Karpenter webhook is registered before CRDs
+# ── 90s wait after Karpenter webhook registers before applying CRDs
+# Karpenter registers its own webhook on startup
+# If EC2NodeClass/NodePool CRDs apply before webhook is ready → failure
 resource "time_sleep" "wait_for_karpenter_webhook" {
   create_duration = "90s"
   depends_on      = [helm_release.karpenter]
@@ -252,10 +259,10 @@ resource "kubectl_manifest" "karpenter_node_pool" {
             name       = "default"
           }
           requirements = [
-            { key = "karpenter.sh/capacity-type",        operator = "In", values = ["spot", "on-demand"] },
-            { key = "node.kubernetes.io/instance-type",  operator = "In", values = ["t3.medium", "t3.large", "t3a.medium", "t3a.large"] },
-            { key = "kubernetes.io/arch",                operator = "In", values = ["amd64"] },
-            { key = "topology.kubernetes.io/zone",       operator = "In", values = var.availability_zones }
+            { key = "karpenter.sh/capacity-type",       operator = "In", values = ["spot", "on-demand"] },
+            { key = "node.kubernetes.io/instance-type", operator = "In", values = ["t3.medium", "t3.large", "t3a.medium", "t3a.large"] },
+            { key = "kubernetes.io/arch",               operator = "In", values = ["amd64"] },
+            { key = "topology.kubernetes.io/zone",      operator = "In", values = var.availability_zones }
           ]
         }
       }
