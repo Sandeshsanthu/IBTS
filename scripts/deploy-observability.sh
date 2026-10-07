@@ -3,13 +3,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ════════════════════════════════════════
-# USAGE: ./deploy-observability.sh <cluster-name> <region>
-# Called by deploy-observability job in terraform.yml
-# Deploys Karpenter + full observability stack via Helm CLI
-# outside Terraform to avoid provider timeout issues
-# ════════════════════════════════════════
-
 CLUSTER_NAME="${1:?Usage: deploy-observability.sh <cluster-name> <region>}"
 REGION="${2:?Usage: deploy-observability.sh <cluster-name> <region>}"
 OBS_NAMESPACE="ibts-observability"
@@ -19,17 +12,15 @@ KARPENTER_VERSION="${KARPENTER_VERSION:-1.0.8}"
 echo "==> Cluster : $CLUSTER_NAME"
 echo "==> Region  : $REGION"
 
-# ── Configure kubectl
 echo "==> Configuring kubectl"
 aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER_NAME"
 
-# ── Verify cluster is reachable
 echo "==> Verifying cluster connectivity"
 kubectl get nodes --no-headers | awk '{print "  node:", $1, $2}'
 
-# ════════════════════════════════════════
-# HELM REPOS
-# ════════════════════════════════════════
+echo "==> Node labels (checking for purpose label)"
+kubectl get nodes --show-labels | grep -o 'purpose=[^ ,]*' || echo "  no purpose label found on any node"
+
 echo "==> Adding Helm repos"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add elastic               https://helm.elastic.co
@@ -42,8 +33,6 @@ echo "  Repos updated"
 # ════════════════════════════════════════
 # HELPERS
 # ════════════════════════════════════════
-
-# install_or_upgrade <release> <namespace> <chart> [...helm flags]
 install_or_upgrade() {
   local release=$1
   local namespace=$2
@@ -55,7 +44,6 @@ install_or_upgrade() {
     | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['status'])" \
     2>/dev/null || echo "not-found")
 
-  # clean up stuck releases before attempting install/upgrade
   if [[ "$status" == "failed" || \
         "$status" == "pending-install" || \
         "$status" == "pending-upgrade" ]]; then
@@ -75,9 +63,6 @@ install_or_upgrade() {
 
 # ════════════════════════════════════════
 # KARPENTER
-# Moved out of Terraform — pod readiness
-# takes >10 min in CI causing context
-# deadline exceeded in helm provider
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
@@ -92,6 +77,8 @@ CLUSTER_ENDPOINT=$(aws eks describe-cluster \
 
 echo "  Cluster endpoint: $CLUSTER_ENDPOINT"
 
+# ✅ FIX: no nodeSelector — label not confirmed on nodes
+# ✅ FIX: no --wait — poll readiness separately for better debug output
 install_or_upgrade karpenter kube-system \
   "oci://public.ecr.aws/karpenter/karpenter" \
   --version "${KARPENTER_VERSION}" \
@@ -103,15 +90,33 @@ install_or_upgrade karpenter kube-system \
   --set "tolerations[0].key=CriticalAddonsOnly" \
   --set "tolerations[0].operator=Exists" \
   --set "tolerations[0].effect=NoSchedule" \
-  --set "nodeSelector.node\.kubernetes\.io/purpose=system" \
   --set "controller.resources.requests.cpu=100m" \
   --set "controller.resources.requests.memory=256Mi" \
   --set "controller.resources.limits.cpu=500m" \
-  --set "controller.resources.limits.memory=512Mi" \
-  --wait \
-  --timeout 20m
+  --set "controller.resources.limits.memory=512Mi"
 
-echo "  Karpenter deployed — waiting 90s for webhook to register"
+echo "  Karpenter chart installed — polling pod readiness"
+echo "  Current pod status:"
+kubectl get pods -n kube-system -l app.kubernetes.io/name=karpenter -o wide || true
+
+kubectl wait pod \
+  -n kube-system \
+  -l app.kubernetes.io/name=karpenter \
+  --for=condition=Ready \
+  --timeout=1200s \
+  && echo "  ✅ Karpenter pod Ready" \
+  || {
+    echo "  ❌ Karpenter pod not Ready after 20 min — debug info:"
+    echo "  --- pod status ---"
+    kubectl get pods -n kube-system -l app.kubernetes.io/name=karpenter -o wide
+    echo "  --- describe ---"
+    kubectl describe pod -n kube-system -l app.kubernetes.io/name=karpenter
+    echo "  --- logs ---"
+    kubectl logs -n kube-system -l app.kubernetes.io/name=karpenter --tail=50 2>/dev/null || true
+    exit 1
+  }
+
+echo "  Waiting 90s for Karpenter webhook to register"
 sleep 90
 
 echo "==> Applying EC2NodeClass"
@@ -174,9 +179,11 @@ spec:
 EOF
 
 echo "  EC2NodeClass + NodePool applied"
+echo "  Pausing 30s for Karpenter controller to reconcile"
+sleep 30
 
 # ════════════════════════════════════════
-# OBSERVABILITY NAMESPACE
+# OBSERVABILITY STACK
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
@@ -185,9 +192,6 @@ echo "════════════════════════�
 
 kubectl create namespace "$OBS_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-# ── kube-prometheus-stack
-# admissionWebhooks disabled — they cause the same timeout
-# issue in helm CLI that they did in Terraform
 echo "==> Deploying kube-prometheus-stack"
 install_or_upgrade kube-prometheus-stack "$OBS_NAMESPACE" \
   prometheus-community/kube-prometheus-stack \
@@ -202,7 +206,6 @@ install_or_upgrade kube-prometheus-stack "$OBS_NAMESPACE" \
   --set prometheus.prometheusSpec.retention=30d \
   --wait
 
-# ── Elasticsearch
 echo "==> Deploying elasticsearch"
 install_or_upgrade elasticsearch "$OBS_NAMESPACE" \
   elastic/elasticsearch \
@@ -212,10 +215,9 @@ install_or_upgrade elasticsearch "$OBS_NAMESPACE" \
   --set minimumMasterNodes=1 \
   --set esJavaOpts="-Xmx512m -Xms512m" \
   --set volumeClaimTemplate.storageClassName=gp3 \
-  --set "esConfig.elasticsearch\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n" \
+  --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n" \
   --wait
 
-# ── Kibana
 echo "==> Deploying kibana"
 install_or_upgrade kibana "$OBS_NAMESPACE" \
   elastic/kibana \
@@ -224,7 +226,6 @@ install_or_upgrade kibana "$OBS_NAMESPACE" \
   --set "elasticsearchHosts=http://elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local:9200" \
   --wait
 
-# ── OpenTelemetry Collector
 echo "==> Deploying otel-collector"
 install_or_upgrade otel-collector "$OBS_NAMESPACE" \
   open-telemetry/opentelemetry-collector \
@@ -234,7 +235,6 @@ install_or_upgrade otel-collector "$OBS_NAMESPACE" \
   --set image.repository=otel/opentelemetry-collector-contrib \
   --wait
 
-# ── Jaeger
 echo "==> Deploying jaeger"
 install_or_upgrade jaeger "$OBS_NAMESPACE" \
   jaegertracing/jaeger \
@@ -248,7 +248,6 @@ install_or_upgrade jaeger "$OBS_NAMESPACE" \
   --set agent.enabled=false \
   --wait
 
-# ── Fluent Bit
 echo "==> Deploying fluent-bit"
 install_or_upgrade fluent-bit "$OBS_NAMESPACE" \
   fluent/fluent-bit \
