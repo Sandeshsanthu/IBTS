@@ -1,3 +1,6 @@
+# filename: infra-aws/inital/stage2-config/03-karpenter.tf
+
+# ── Pull cluster data from stage1 remote state
 data "aws_eks_cluster" "this" {
   name = var.cluster_name
 }
@@ -60,7 +63,7 @@ resource "aws_sqs_queue_policy" "karpenter_interruption" {
     Statement = [{
       Sid       = "AllowEventBridge"
       Effect    = "Allow"
-      Principal = { Service = "://amazonaws.com" }
+      Principal = { Service = "events.amazonaws.com" }
       Action    = "sqs:SendMessage"
       Resource  = aws_sqs_queue.karpenter_interruption.arn
     }]
@@ -73,7 +76,7 @@ resource "aws_iam_role" "karpenter_node" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Service = "://amazonaws.com" }
+      Principal = { Service = "ec2.amazonaws.com" }
       Action    = "sts:AssumeRole"
     }]
   })
@@ -104,12 +107,14 @@ resource "aws_iam_instance_profile" "karpenter_node" {
   role = aws_iam_role.karpenter_node.name
 }
 
+# ── EKS access entry — lets Karpenter nodes auto-join cluster
 resource "aws_eks_access_entry" "karpenter_node" {
   cluster_name  = var.cluster_name
   principal_arn = aws_iam_role.karpenter_node.arn
   type          = "EC2_LINUX"
 }
 
+# ── Karpenter controller IRSA
 module "karpenter_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
   version = "~> 5.39"
@@ -133,7 +138,7 @@ resource "kubernetes_service_account" "karpenter" {
     name      = "karpenter"
     namespace = "kube-system"
     annotations = {
-      "://amazonaws.com" = module.karpenter_irsa.iam_role_arn
+      "eks.amazonaws.com/role-arn" = module.karpenter_irsa.iam_role_arn
     }
   }
 }
@@ -143,6 +148,7 @@ resource "time_sleep" "wait_for_alb_webhook" {
   depends_on      = [helm_release.aws_lb_controller]
 }
 
+# ── Karpenter Helm release
 resource "helm_release" "karpenter" {
   name       = "karpenter"
   namespace  = "kube-system"
@@ -150,21 +156,21 @@ resource "helm_release" "karpenter" {
   chart      = "karpenter"
   version    = var.karpenter_version
 
-  timeout         = 600
-  atomic          = false   
-  cleanup_on_fail = false   
+  timeout         = 600   
+  atomic          = false
+  cleanup_on_fail = false
 
   values = [yamlencode({
     serviceAccount = {
       create = false
-      name   = kubernetes_service_account.karpenter.metadata[0].name
+      # ✅ FIXED: Stripped away broken [0] index accessor format
+      name   = kubernetes_service_account.karpenter.metadata.name
     }
     settings = {
       clusterName       = var.cluster_name
       clusterEndpoint   = data.aws_eks_cluster.this.endpoint
       interruptionQueue = aws_sqs_queue.karpenter_interruption.name
     }
-    # Properly scopes Karpenter pod to match the System Node group
     tolerations = [{
       key      = "CriticalAddonsOnly"
       operator = "Exists"
@@ -233,7 +239,6 @@ resource "kubectl_manifest" "karpenter_node_pool" {
             name       = "default"
           }
           requirements = [
-            # 🚀 CHANGED: Enforces only Spot instances for workloads to meet budget goals
             { key = "karpenter.sh/capacity-type",       operator = "In", values = ["spot"] },
             { key = "node.kubernetes.io/instance-type", operator = "In", values = ["t3.medium", "t3a.medium", "t3.large"] },
             { key = "kubernetes.io/arch",               operator = "In", values = ["amd64"] },
