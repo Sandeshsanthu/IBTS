@@ -62,8 +62,6 @@ install_or_upgrade() {
   fi
 }
 
-# Check ALL pods in namespace — no label selector
-# label-based polling is unreliable across chart versions
 wait_for_pods() {
   local namespace=$1
   local description=$2
@@ -157,7 +155,6 @@ PROFILE_ARN=$(aws iam get-instance-profile \
 
 if [[ "$PROFILE_ARN" == "MISSING" ]]; then
   echo "  ❌ Instance profile ${CLUSTER_NAME}-karpenter-node NOT FOUND"
-  echo "     stage2 Terraform must create aws_iam_instance_profile.karpenter_node"
   PREREQ_FAILED=1
 else
   echo "  ✅ Instance profile exists: $PROFILE_ARN"
@@ -283,25 +280,19 @@ echo "  Waiting 90s for Karpenter webhook to register"
 sleep 90
 
 # ════════════════════════════════════════
-# EC2NODECLASS — KEY FIX
-# spec.instanceProfile instead of spec.role
-#
-# spec.role      → Karpenter tries to CREATE
-#                  and manage instance profile
-#                  requires iam:GetInstanceProfile
-#                  iam:CreateInstanceProfile etc.
-#                  BROKEN — causes InstanceProfileReady
-#                  =Unknown forever
-#
-# spec.instanceProfile → Use the existing profile
-#                        created by Terraform
-#                        aws_iam_instance_profile
-#                        .karpenter_node
-#                        No IAM management needed
-#                        EC2NodeClass goes Ready
-#                        immediately
+# EC2NODECLASS
+# Delete before recreating — Karpenter does
+# not allow changing spec.role ↔ spec.instanceProfile
+# in-place. Delete is safe: existing nodes are
+# not terminated, only new provisioning pauses
+# briefly during recreation.
 # ════════════════════════════════════════
-echo "==> Applying EC2NodeClass"
+echo "==> Deleting existing EC2NodeClass (required for role→instanceProfile change)"
+kubectl delete ec2nodeclass default --ignore-not-found
+echo "  Waiting 5s for deletion to propagate"
+sleep 5
+
+echo "==> Applying EC2NodeClass with instanceProfile"
 kubectl apply -f - <<EOF
 apiVersion: karpenter.k8s.aws/v1
 kind: EC2NodeClass
@@ -310,9 +301,8 @@ metadata:
 spec:
   amiSelectorTerms:
     - alias: al2@latest
-  # ✅ FIXED: was spec.role which caused Karpenter to try
-  # to manage instance profiles via iam:GetInstanceProfile
-  # Use pre-existing Terraform-managed instance profile instead
+  # Using pre-existing Terraform-managed instance profile
+  # instead of spec.role which caused InstanceProfileReady=Unknown
   instanceProfile: "${CLUSTER_NAME}-karpenter-node"
   subnetSelectorTerms:
     - tags:
@@ -370,7 +360,6 @@ echo "  EC2NodeClass + NodePool applied"
 
 # ════════════════════════════════════════
 # GATE: EC2NodeClass must be Ready
-# before any Helm installs
 # ════════════════════════════════════════
 echo "==> Waiting for EC2NodeClass Ready=True (max 3 min)"
 EC2_READY=false
@@ -393,9 +382,7 @@ done
 if [[ "$EC2_READY" == "false" ]]; then
   echo ""
   echo "  ❌ EC2NodeClass not Ready after 3 min"
-  echo "  --- EC2NodeClass full status ---"
   kubectl describe ec2nodeclass default 2>/dev/null || true
-  echo "  --- Karpenter logs ---"
   kubectl logs -n kube-system \
     -l app.kubernetes.io/name=karpenter --tail=30 2>/dev/null || true
   echo "  ❌ Aborting — fix EC2NodeClass and re-run"
@@ -404,7 +391,6 @@ fi
 
 echo "==> NodePool status:"
 kubectl get nodepool default 2>/dev/null || true
-
 echo "  Pausing 20s for NodePool to reach Ready"
 sleep 20
 
