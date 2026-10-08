@@ -137,7 +137,6 @@ SQS_QUEUE_ARN=$(aws sqs get-queue-attributes \
 
 echo "  Queue ARN: $SQS_QUEUE_ARN"
 
-# Check if managed policy already includes SQS
 HAS_SQS=$(aws iam get-role \
   --role-name "${CLUSTER_NAME}-karpenter-controller" \
   --query 'Role.RoleName' \
@@ -236,7 +235,11 @@ kind: EC2NodeClass
 metadata:
   name: default
 spec:
-  amiFamily: AL2
+  # ✅ FIXED: amiFamily removed in karpenter.k8s.aws/v1
+  # was: amiFamily: AL2
+  # v1 API requires amiSelectorTerms with alias instead
+  amiSelectorTerms:
+    - alias: al2@latest
   role: "${CLUSTER_NAME}-karpenter-node"
   subnetSelectorTerms:
     - tags:
