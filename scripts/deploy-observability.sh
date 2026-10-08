@@ -503,23 +503,23 @@ kubectl get all -n "$OBS_NAMESPACE" 2>/dev/null || echo "  namespace is empty"
 # echo " OBSERVABILITY STACK"
 # echo "══════════════════════════════════════"
 
-# kubectl create namespace "$OBS_NAMESPACE" \
-#   --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace "$OBS_NAMESPACE" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-# echo "==> Deploying kube-prometheus-stack"
-# helm install kube-prometheus-stack "$OBS_NAMESPACE" \
-#   prometheus-community/kube-prometheus-stack \
-#   -n "$OBS_NAMESPACE" \
-#   --version 58.2.2 \
-#   --timeout 30m \
-#   --set prometheusOperator.admissionWebhooks.enabled=false \
-#   --set prometheusOperator.admissionWebhooks.patch.enabled=false \
-#   --set "grafana.adminPassword=${GRAFANA_PASSWORD}" \
-#   --set grafana.persistence.enabled=true \
-#   --set grafana.persistence.storageClassName=gp3 \
-#   --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=gp3 \
-#   --set prometheus.prometheusSpec.retention=30d
-# wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
+echo "==> Deploying kube-prometheus-stack"
+helm install kube-prometheus-stack "$OBS_NAMESPACE" \
+  prometheus-community/kube-prometheus-stack \
+  -n "$OBS_NAMESPACE" \
+  --version 58.2.2 \
+  --timeout 30m \
+  --set prometheusOperator.admissionWebhooks.enabled=false \
+  --set prometheusOperator.admissionWebhooks.patch.enabled=false \
+  --set "grafana.adminPassword=${GRAFANA_PASSWORD}" \
+  --set grafana.persistence.enabled=true \
+  --set grafana.persistence.storageClassName=gp3 \
+  --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=gp3 \
+  --set prometheus.prometheusSpec.retention=30d
+wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
 
 # echo "==> Deploying elasticsearch"
 # helm install elasticsearch "$OBS_NAMESPACE" \
