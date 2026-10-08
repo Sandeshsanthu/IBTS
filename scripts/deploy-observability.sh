@@ -63,7 +63,6 @@ install_or_upgrade() {
 
 # ════════════════════════════════════════
 # PREREQUISITE CHECKS
-# Fail fast before any Helm install
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
@@ -121,7 +120,6 @@ echo "  ✅ All prerequisites verified"
 
 # ════════════════════════════════════════
 # PATCH SQS PERMISSIONS
-# Safety net in case managed policy lags
 # ════════════════════════════════════════
 echo ""
 echo "==> Verifying Karpenter controller role has SQS permissions"
@@ -249,6 +247,7 @@ spec:
         encrypted: true
         deleteOnTermination: true
 EOF
+
 echo "==> Applying NodePool"
 kubectl apply -f - <<EOF
 apiVersion: karpenter.sh/v1
@@ -289,6 +288,63 @@ EOF
 echo "  EC2NodeClass + NodePool applied"
 echo "  Pausing 30s for Karpenter controller to reconcile"
 sleep 30
+
+# ════════════════════════════════════════
+# STORAGE PREREQUISITES
+# Must exist before any Helm chart that
+# requests PVCs — Prometheus, Grafana,
+# Elasticsearch all need gp3 volumes
+# ════════════════════════════════════════
+echo ""
+echo "══════════════════════════════════════"
+echo " STORAGE PREREQUISITES"
+echo "══════════════════════════════════════"
+
+echo "==> Verifying EBS CSI driver is running"
+kubectl wait pod \
+  -n kube-system \
+  -l app.kubernetes.io/name=aws-ebs-csi-driver \
+  --for=condition=Ready \
+  --timeout=120s \
+  && echo "  ✅ EBS CSI driver Ready" \
+  || {
+    echo "  ⚠️  EBS CSI driver pods not found via label — checking all pods"
+    kubectl get pods -n kube-system | grep ebs || echo "  ❌ No EBS CSI pods found — PVCs will not bind"
+    kubectl get pods -n kube-system | grep ebs
+  }
+
+echo "==> Ensuring gp3 StorageClass exists"
+if kubectl get storageclass gp3 &>/dev/null; then
+  echo "  ✅ gp3 StorageClass already exists"
+  kubectl get storageclass gp3
+else
+  echo "  gp3 StorageClass missing — creating"
+  kubectl apply -f - <<EOF
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+parameters:
+  type: gp3
+  encrypted: "true"
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+EOF
+  echo "  ✅ gp3 StorageClass created"
+fi
+
+echo "==> Removing default annotation from gp2 if present"
+kubectl patch storageclass gp2 \
+  -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' \
+  2>/dev/null && echo "  ✅ gp2 default annotation removed" \
+  || echo "  gp2 not present or already non-default — skipping"
+
+echo "==> Current StorageClasses:"
+kubectl get storageclass
 
 # ════════════════════════════════════════
 # OBSERVABILITY STACK
@@ -389,4 +445,8 @@ done
 echo ""
 echo "Nodes:"
 kubectl get nodes --no-headers | awk '{printf "  %-40s %s\n", $1, $2}'
+
+echo ""
+echo "PVCs:"
+kubectl get pvc -n "$OBS_NAMESPACE" 2>/dev/null || echo "  none"
 echo ""
