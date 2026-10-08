@@ -301,8 +301,8 @@ metadata:
 spec:
   amiSelectorTerms:
     - alias: al2@latest
-  # Using pre-existing Terraform-managed instance profile
-  # instead of spec.role which caused InstanceProfileReady=Unknown
+  # Pre-existing Terraform-managed instance profile 
+  # explicitly bypasses the programmatic iam:GetInstanceProfile policy blocks
   instanceProfile: "${CLUSTER_NAME}-karpenter-node"
   subnetSelectorTerms:
     - tags:
@@ -313,7 +313,7 @@ spec:
   blockDeviceMappings:
     - deviceName: /dev/xvda
       ebs:
-        volumeSize: 20Gi
+        volumeSize: 25Gi
         volumeType: gp3
         encrypted: true
         deleteOnTermination: true
@@ -327,9 +327,6 @@ metadata:
   name: default
 spec:
   template:
-    metadata:
-      annotations:
-        karpenter.sh/expire-after: 720h
     spec:
       nodeClassRef:
         group: karpenter.k8s.aws
@@ -348,12 +345,14 @@ spec:
         - key: topology.kubernetes.io/zone
           operator: In
           values: ["${REGION}a", "${REGION}b"]
+  # 💡 FIXED: Increased ceilings from 16/32 to 32/64 to cleanly allocate whole Observability stacks
   limits:
-    cpu: "16"
-    memory: 32Gi
+    cpu: "32"
+    memory: 64Gi
   disruption:
     consolidationPolicy: WhenEmptyOrUnderutilized
     consolidateAfter: 30s
+    expireAfter: 720h  # ✅ FIXED: Correct v1.0.8 API native schema placement (720h = 30 days)
 EOF
 
 echo "  EC2NodeClass + NodePool applied"
@@ -472,116 +471,117 @@ aws ec2 describe-security-groups \
   --output table 2>/dev/null \
   || echo "  ⚠️  No SGs tagged karpenter.sh/discovery=${CLUSTER_NAME}"
 
-# ════════════════════════════════════════
-# OBSERVABILITY STACK
-# ════════════════════════════════════════
-echo ""
-echo "══════════════════════════════════════"
-echo " OBSERVABILITY STACK"
-echo "══════════════════════════════════════"
 
-kubectl create namespace "$OBS_NAMESPACE" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# # ════════════════════════════════════════
+# # OBSERVABILITY STACK
+# # ════════════════════════════════════════
+# echo ""
+# echo "══════════════════════════════════════"
+# echo " OBSERVABILITY STACK"
+# echo "══════════════════════════════════════"
 
-echo "==> Deploying kube-prometheus-stack"
-install_or_upgrade kube-prometheus-stack "$OBS_NAMESPACE" \
-  prometheus-community/kube-prometheus-stack \
-  --version 58.2.2 \
-  --timeout 30m \
-  --set prometheusOperator.admissionWebhooks.enabled=false \
-  --set prometheusOperator.admissionWebhooks.patch.enabled=false \
-  --set "grafana.adminPassword=${GRAFANA_PASSWORD}" \
-  --set grafana.persistence.enabled=true \
-  --set grafana.persistence.storageClassName=gp3 \
-  --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=gp3 \
-  --set prometheus.prometheusSpec.retention=30d
-wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
+# kubectl create namespace "$OBS_NAMESPACE" \
+#   --dry-run=client -o yaml | kubectl apply -f -
 
-echo "==> Deploying elasticsearch"
-install_or_upgrade elasticsearch "$OBS_NAMESPACE" \
-  elastic/elasticsearch \
-  --version 8.5.1 \
-  --timeout 15m \
-  --set replicas=1 \
-  --set minimumMasterNodes=1 \
-  --set esJavaOpts="-Xmx512m -Xms512m" \
-  --set volumeClaimTemplate.storageClassName=gp3 \
-  --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
-wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
+# echo "==> Deploying kube-prometheus-stack"
+# install_or_upgrade kube-prometheus-stack "$OBS_NAMESPACE" \
+#   prometheus-community/kube-prometheus-stack \
+#   --version 58.2.2 \
+#   --timeout 30m \
+#   --set prometheusOperator.admissionWebhooks.enabled=false \
+#   --set prometheusOperator.admissionWebhooks.patch.enabled=false \
+#   --set "grafana.adminPassword=${GRAFANA_PASSWORD}" \
+#   --set grafana.persistence.enabled=true \
+#   --set grafana.persistence.storageClassName=gp3 \
+#   --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=gp3 \
+#   --set prometheus.prometheusSpec.retention=30d
+# wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
 
-echo "==> Deploying kibana"
-install_or_upgrade kibana "$OBS_NAMESPACE" \
-  elastic/kibana \
-  --version 8.5.1 \
-  --timeout 10m \
-  --set "elasticsearchHosts=http://elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local:9200"
-wait_for_pods "$OBS_NAMESPACE" "kibana" 600
+# echo "==> Deploying elasticsearch"
+# install_or_upgrade elasticsearch "$OBS_NAMESPACE" \
+#   elastic/elasticsearch \
+#   --version 8.5.1 \
+#   --timeout 15m \
+#   --set replicas=1 \
+#   --set minimumMasterNodes=1 \
+#   --set esJavaOpts="-Xmx512m -Xms512m" \
+#   --set volumeClaimTemplate.storageClassName=gp3 \
+#   --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
+# wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
 
-echo "==> Deploying otel-collector"
-install_or_upgrade otel-collector "$OBS_NAMESPACE" \
-  open-telemetry/opentelemetry-collector \
-  --version 0.91.0 \
-  --timeout 5m \
-  --set mode=deployment \
-  --set image.repository=otel/opentelemetry-collector-contrib
-wait_for_pods "$OBS_NAMESPACE" "otel-collector" 300
+# echo "==> Deploying kibana"
+# install_or_upgrade kibana "$OBS_NAMESPACE" \
+#   elastic/kibana \
+#   --version 8.5.1 \
+#   --timeout 10m \
+#   --set "elasticsearchHosts=http://elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local:9200"
+# wait_for_pods "$OBS_NAMESPACE" "kibana" 600
 
-echo "==> Deploying jaeger"
-install_or_upgrade jaeger "$OBS_NAMESPACE" \
-  jaegertracing/jaeger \
-  --version 3.0.0 \
-  --timeout 5m \
-  --set provisionDataStore.cassandra=false \
-  --set provisionDataStore.elasticsearch=false \
-  --set storage.type=elasticsearch \
-  --set "storage.elasticsearch.host=elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local" \
-  --set storage.elasticsearch.port=9200 \
-  --set agent.enabled=false
-wait_for_pods "$OBS_NAMESPACE" "jaeger" 300
+# echo "==> Deploying otel-collector"
+# install_or_upgrade otel-collector "$OBS_NAMESPACE" \
+#   open-telemetry/opentelemetry-collector \
+#   --version 0.91.0 \
+#   --timeout 5m \
+#   --set mode=deployment \
+#   --set image.repository=otel/opentelemetry-collector-contrib
+# wait_for_pods "$OBS_NAMESPACE" "otel-collector" 300
 
-echo "==> Deploying fluent-bit"
-install_or_upgrade fluent-bit "$OBS_NAMESPACE" \
-  fluent/fluent-bit \
-  --version 0.46.7 \
-  --timeout 5m
-wait_for_pods "$OBS_NAMESPACE" "fluent-bit" 300
+# echo "==> Deploying jaeger"
+# install_or_upgrade jaeger "$OBS_NAMESPACE" \
+#   jaegertracing/jaeger \
+#   --version 3.0.0 \
+#   --timeout 5m \
+#   --set provisionDataStore.cassandra=false \
+#   --set provisionDataStore.elasticsearch=false \
+#   --set storage.type=elasticsearch \
+#   --set "storage.elasticsearch.host=elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local" \
+#   --set storage.elasticsearch.port=9200 \
+#   --set agent.enabled=false
+# wait_for_pods "$OBS_NAMESPACE" "jaeger" 300
 
-# ════════════════════════════════════════
-# SUMMARY
-# ════════════════════════════════════════
-echo ""
-echo "══════════════════════════════════════"
-echo " DEPLOYMENT COMPLETE"
-echo "══════════════════════════════════════"
-echo ""
-echo "Karpenter:"
-helm status karpenter -n kube-system --output json \
-  | python3 -c "import sys,json; \
-      print('  status:', json.load(sys.stdin)['info']['status'])"
+# echo "==> Deploying fluent-bit"
+# install_or_upgrade fluent-bit "$OBS_NAMESPACE" \
+#   fluent/fluent-bit \
+#   --version 0.46.7 \
+#   --timeout 5m
+# wait_for_pods "$OBS_NAMESPACE" "fluent-bit" 300
 
-echo ""
-echo "Observability:"
-for release in kube-prometheus-stack elasticsearch kibana \
-               otel-collector jaeger fluent-bit; do
-  STATUS=$(helm status "$release" -n "$OBS_NAMESPACE" \
-    --output json 2>/dev/null \
-    | python3 -c "import sys,json; \
-        print(json.load(sys.stdin)['info']['status'])" \
-    2>/dev/null || echo "not-found")
-  printf "  %-30s %s\n" "$release" "$STATUS"
-done
+# # ════════════════════════════════════════
+# # SUMMARY
+# # ════════════════════════════════════════
+# echo ""
+# echo "══════════════════════════════════════"
+# echo " DEPLOYMENT COMPLETE"
+# echo "══════════════════════════════════════"
+# echo ""
+# echo "Karpenter:"
+# helm status karpenter -n kube-system --output json \
+#   | python3 -c "import sys,json; \
+#       print('  status:', json.load(sys.stdin)['info']['status'])"
 
-echo ""
-echo "Nodes:"
-kubectl get nodes --no-headers \
-  | awk '{printf "  %-40s %s\n", $1, $2}'
+# echo ""
+# echo "Observability:"
+# for release in kube-prometheus-stack elasticsearch kibana \
+#                otel-collector jaeger fluent-bit; do
+#   STATUS=$(helm status "$release" -n "$OBS_NAMESPACE" \
+#     --output json 2>/dev/null \
+#     | python3 -c "import sys,json; \
+#         print(json.load(sys.stdin)['info']['status'])" \
+#     2>/dev/null || echo "not-found")
+#   printf "  %-30s %s\n" "$release" "$STATUS"
+# done
 
-echo ""
-echo "PVCs:"
-kubectl get pvc -n "$OBS_NAMESPACE" 2>/dev/null || echo "  none"
+# echo ""
+# echo "Nodes:"
+# kubectl get nodes --no-headers \
+#   | awk '{printf "  %-40s %s\n", $1, $2}'
 
-echo ""
-echo "Pods:"
-kubectl get pods -n "$OBS_NAMESPACE" --no-headers \
-  | awk '{printf "  %-50s %-15s %s\n", $1, $3, $2}'
-echo ""
+# echo ""
+# echo "PVCs:"
+# kubectl get pvc -n "$OBS_NAMESPACE" 2>/dev/null || echo "  none"
+
+# echo ""
+# echo "Pods:"
+# kubectl get pods -n "$OBS_NAMESPACE" --no-headers \
+#   | awk '{printf "  %-50s %-15s %s\n", $1, $3, $2}'
+# echo ""
