@@ -62,10 +62,8 @@ install_or_upgrade() {
   fi
 }
 
-# ✅ FIXED: no label selector — check ALL pods in namespace
-# label-based polling returned 0/0 because chart labels differ
-# across components (operator, prometheus, grafana, alertmanager)
-# checking namespace-wide is simpler and always correct
+# Check ALL pods in namespace — no label selector
+# label-based polling is unreliable across chart versions
 wait_for_pods() {
   local namespace=$1
   local description=$2
@@ -73,7 +71,7 @@ wait_for_pods() {
   local elapsed=0
   local interval=30
 
-  echo "  Waiting for $description pods in $namespace (timeout ${timeout_seconds}s)"
+  echo "  Polling $description pods in $namespace (timeout ${timeout_seconds}s)"
 
   while [[ $elapsed -lt $timeout_seconds ]]; do
     local total ready pending failed
@@ -88,35 +86,31 @@ wait_for_pods() {
       | awk '$3=="Pending"' | wc -l | tr -d ' ')
     failed=$(kubectl get pods -n "$namespace" \
       --no-headers 2>/dev/null \
-      | awk '$3~/Error|CrashLoop|OOMKilled/' | wc -l | tr -d ' ')
+      | awk '$3~/Error|CrashLoop|OOMKilled/' \
+      | wc -l | tr -d ' ')
 
     echo "  [${elapsed}s] total=${total} ready=${ready} pending=${pending} failed=${failed}"
 
-    if [[ "$total" -gt "0" && "$ready" -eq "$total" ]]; then
+    if [[ "$total" -gt "0" && "$ready" -eq "$total" && "$failed" -eq "0" ]]; then
       echo "  ✅ All $description pods Ready"
       return 0
     fi
 
-    # Every 60s print diagnostics
     if (( elapsed % 60 == 0 && elapsed > 0 )); then
       echo "  --- pod list ---"
       kubectl get pods -n "$namespace" --no-headers 2>/dev/null || true
-
       echo "  --- pvc status ---"
-      kubectl get pvc -n "$namespace" --no-headers 2>/dev/null || true
-
+      kubectl get pvc  -n "$namespace" --no-headers 2>/dev/null || true
       echo "  --- scheduling events ---"
       kubectl get events -n "$namespace" \
         --field-selector reason=FailedScheduling \
         --sort-by='.lastTimestamp' 2>/dev/null | tail -8 || true
-
       echo "  --- karpenter nodeclaims ---"
       kubectl get nodeclaims 2>/dev/null | head -10 || true
-
-      echo "  --- karpenter logs (last 10 lines) ---"
+      echo "  --- karpenter logs ---"
       kubectl logs -n kube-system \
         -l app.kubernetes.io/name=karpenter \
-        --tail=10 2>/dev/null || true
+        --tail=8 2>/dev/null || true
     fi
 
     sleep $interval
@@ -124,9 +118,10 @@ wait_for_pods() {
   done
 
   echo "  ❌ Pods not Ready after ${timeout_seconds}s — full dump:"
-  kubectl get pods  -n "$namespace"
-  kubectl get pvc   -n "$namespace" 2>/dev/null || true
-  kubectl get events -n "$namespace" --sort-by='.lastTimestamp' | tail -30
+  kubectl get pods   -n "$namespace"
+  kubectl get pvc    -n "$namespace" 2>/dev/null || true
+  kubectl get events -n "$namespace" \
+    --sort-by='.lastTimestamp' | tail -30
   return 1
 }
 
@@ -152,6 +147,20 @@ if [[ "$SQS_URL" == "MISSING" ]]; then
   PREREQ_FAILED=1
 else
   echo "  ✅ SQS queue exists: $SQS_URL"
+fi
+
+echo "==> Checking IAM instance profile: ${CLUSTER_NAME}-karpenter-node"
+PROFILE_ARN=$(aws iam get-instance-profile \
+  --instance-profile-name "${CLUSTER_NAME}-karpenter-node" \
+  --query 'InstanceProfile.Arn' \
+  --output text 2>/dev/null || echo "MISSING")
+
+if [[ "$PROFILE_ARN" == "MISSING" ]]; then
+  echo "  ❌ Instance profile ${CLUSTER_NAME}-karpenter-node NOT FOUND"
+  echo "     stage2 Terraform must create aws_iam_instance_profile.karpenter_node"
+  PREREQ_FAILED=1
+else
+  echo "  ✅ Instance profile exists: $PROFILE_ARN"
 fi
 
 echo "==> Checking IAM role: ${CLUSTER_NAME}-karpenter-controller"
@@ -186,10 +195,7 @@ fi
 echo "  ✅ All prerequisites verified"
 
 # ════════════════════════════════════════
-# PATCH IAM PERMISSIONS
-# Attached every run — idempotent
-# Terraform is permanent fix via
-# aws_iam_role_policy in 03-karpenter.tf
+# PATCH SQS PERMISSIONS (idempotent)
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
@@ -203,7 +209,7 @@ SQS_QUEUE_ARN=$(aws sqs get-queue-attributes \
   --output text)
 echo "  Queue ARN: $SQS_QUEUE_ARN"
 
-echo "==> Patching SQS permissions"
+echo "==> Patching SQS permissions (idempotent)"
 aws iam put-role-policy \
   --role-name "${CLUSTER_NAME}-karpenter-controller" \
   --policy-name "KarpenterSQSInterruption" \
@@ -222,28 +228,6 @@ aws iam put-role-policy \
     }]
   }"
 echo "  ✅ SQS permissions patched"
-
-echo "==> Patching IAM instance profile permissions"
-aws iam put-role-policy \
-  --role-name "${CLUSTER_NAME}-karpenter-controller" \
-  --policy-name "KarpenterInstanceProfilePermissions" \
-  --policy-document '{
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Sid": "KarpenterInstanceProfile",
-      "Effect": "Allow",
-      "Action": [
-        "iam:CreateInstanceProfile",
-        "iam:DeleteInstanceProfile",
-        "iam:GetInstanceProfile",
-        "iam:AddRoleToInstanceProfile",
-        "iam:RemoveRoleFromInstanceProfile",
-        "iam:TagInstanceProfile"
-      ],
-      "Resource": "*"
-    }]
-  }'
-echo "  ✅ Instance profile permissions patched"
 
 # ════════════════════════════════════════
 # KARPENTER
@@ -276,17 +260,6 @@ install_or_upgrade karpenter kube-system \
   --set "controller.resources.limits.cpu=500m" \
   --set "controller.resources.limits.memory=512Mi"
 
-# ✅ ADDED: restart Karpenter pods so they pick up
-# the new IAM inline policies immediately
-# IRSA credentials are cached in the pod — without
-# restart the iam:GetInstanceProfile call still fails
-# even though the inline policy is now attached
-echo "==> Restarting Karpenter pods to pick up new IAM permissions"
-kubectl rollout restart deployment/karpenter -n kube-system
-kubectl rollout status deployment/karpenter -n kube-system --timeout=120s \
-  && echo "  ✅ Karpenter restarted" \
-  || echo "  ⚠️  Rollout status check failed — continuing"
-
 echo "  Current pod status:"
 kubectl get pods -n kube-system \
   -l app.kubernetes.io/name=karpenter -o wide || true
@@ -299,9 +272,9 @@ kubectl wait pod \
   && echo "  ✅ Karpenter pod Ready" \
   || {
     echo "  ❌ Karpenter pod not Ready"
-    kubectl get pods    -n kube-system -l app.kubernetes.io/name=karpenter -o wide
-    kubectl describe pod -n kube-system -l app.kubernetes.io/name=karpenter
-    kubectl logs        -n kube-system \
+    kubectl describe pod -n kube-system \
+      -l app.kubernetes.io/name=karpenter
+    kubectl logs -n kube-system \
       -l app.kubernetes.io/name=karpenter --tail=50 2>/dev/null || true
     exit 1
   }
@@ -309,6 +282,25 @@ kubectl wait pod \
 echo "  Waiting 90s for Karpenter webhook to register"
 sleep 90
 
+# ════════════════════════════════════════
+# EC2NODECLASS — KEY FIX
+# spec.instanceProfile instead of spec.role
+#
+# spec.role      → Karpenter tries to CREATE
+#                  and manage instance profile
+#                  requires iam:GetInstanceProfile
+#                  iam:CreateInstanceProfile etc.
+#                  BROKEN — causes InstanceProfileReady
+#                  =Unknown forever
+#
+# spec.instanceProfile → Use the existing profile
+#                        created by Terraform
+#                        aws_iam_instance_profile
+#                        .karpenter_node
+#                        No IAM management needed
+#                        EC2NodeClass goes Ready
+#                        immediately
+# ════════════════════════════════════════
 echo "==> Applying EC2NodeClass"
 kubectl apply -f - <<EOF
 apiVersion: karpenter.k8s.aws/v1
@@ -318,7 +310,10 @@ metadata:
 spec:
   amiSelectorTerms:
     - alias: al2@latest
-  role: "${CLUSTER_NAME}-karpenter-node"
+  # ✅ FIXED: was spec.role which caused Karpenter to try
+  # to manage instance profiles via iam:GetInstanceProfile
+  # Use pre-existing Terraform-managed instance profile instead
+  instanceProfile: "${CLUSTER_NAME}-karpenter-node"
   subnetSelectorTerms:
     - tags:
         karpenter.sh/discovery: "${CLUSTER_NAME}"
@@ -373,21 +368,22 @@ EOF
 
 echo "  EC2NodeClass + NodePool applied"
 
-# ✅ GATE: wait for EC2NodeClass InstanceProfileReady=True
-# before starting any Helm installs — if this stays Unknown
-# Karpenter cannot provision nodes and all pods stay Pending
-echo "==> Waiting for EC2NodeClass InstanceProfileReady=True (max 5 min)"
+# ════════════════════════════════════════
+# GATE: EC2NodeClass must be Ready
+# before any Helm installs
+# ════════════════════════════════════════
+echo "==> Waiting for EC2NodeClass Ready=True (max 3 min)"
 EC2_READY=false
-for i in $(seq 1 30); do
+for i in $(seq 1 18); do
   IP_STATUS=$(kubectl get ec2nodeclass default \
     -o jsonpath='{.status.conditions[?(@.type=="InstanceProfileReady")].status}' \
     2>/dev/null || echo "Unknown")
   NC_STATUS=$(kubectl get ec2nodeclass default \
     -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' \
     2>/dev/null || echo "Unknown")
-  echo "  [$(( i * 10 ))s] InstanceProfileReady=${IP_STATUS}  EC2NodeClass Ready=${NC_STATUS}"
-  if [[ "$IP_STATUS" == "True" ]]; then
-    echo "  ✅ EC2NodeClass InstanceProfileReady — Karpenter can provision nodes"
+  echo "  [$(( i * 10 ))s] InstanceProfileReady=${IP_STATUS}  Ready=${NC_STATUS}"
+  if [[ "$NC_STATUS" == "True" ]]; then
+    echo "  ✅ EC2NodeClass Ready — Karpenter can provision nodes"
     EC2_READY=true
     break
   fi
@@ -396,29 +392,21 @@ done
 
 if [[ "$EC2_READY" == "false" ]]; then
   echo ""
-  echo "  ❌ EC2NodeClass InstanceProfileReady never became True"
-  echo "  This means Karpenter still cannot create instance profiles"
-  echo "  Check IAM permissions on role: ${CLUSTER_NAME}-karpenter-controller"
-  echo ""
-  echo "  Current inline policies on role:"
-  aws iam list-role-policies \
-    --role-name "${CLUSTER_NAME}-karpenter-controller" \
-    --output table 2>/dev/null || true
-  echo ""
-  echo "  Recent Karpenter logs:"
+  echo "  ❌ EC2NodeClass not Ready after 3 min"
+  echo "  --- EC2NodeClass full status ---"
+  kubectl describe ec2nodeclass default 2>/dev/null || true
+  echo "  --- Karpenter logs ---"
   kubectl logs -n kube-system \
     -l app.kubernetes.io/name=karpenter --tail=30 2>/dev/null || true
-  echo ""
-  echo "  ❌ Aborting — fix IAM permissions and re-run"
+  echo "  ❌ Aborting — fix EC2NodeClass and re-run"
   exit 1
 fi
 
-echo "  Pausing 30s for NodePool to reach Ready state"
-sleep 30
-
-echo "==> Final Karpenter status before installs:"
+echo "==> NodePool status:"
 kubectl get nodepool default 2>/dev/null || true
-kubectl get ec2nodeclass default 2>/dev/null || true
+
+echo "  Pausing 20s for NodePool to reach Ready"
+sleep 20
 
 # ════════════════════════════════════════
 # STORAGE PREREQUISITES
@@ -428,25 +416,20 @@ echo "════════════════════════�
 echo " STORAGE PREREQUISITES"
 echo "══════════════════════════════════════"
 
-echo "==> Verifying EBS CSI driver is running"
+echo "==> Verifying EBS CSI driver"
 kubectl wait pod \
   -n kube-system \
   -l app.kubernetes.io/name=aws-ebs-csi-driver \
   --for=condition=Ready \
   --timeout=120s \
   && echo "  ✅ EBS CSI driver Ready" \
-  || {
-    echo "  ⚠️  Checking EBS CSI pods by name"
-    kubectl get pods -n kube-system | grep ebs \
-      || echo "  ❌ No EBS CSI pods found"
-  }
+  || kubectl get pods -n kube-system | grep ebs \
+  || echo "  ❌ No EBS CSI pods found"
 
 echo "==> Ensuring gp3 StorageClass exists"
 if kubectl get storageclass gp3 &>/dev/null; then
   echo "  ✅ gp3 StorageClass already exists"
-  kubectl get storageclass gp3
 else
-  echo "  gp3 StorageClass missing — creating"
   kubectl apply -f - <<EOF
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
@@ -465,13 +448,12 @@ EOF
   echo "  ✅ gp3 StorageClass created"
 fi
 
-echo "==> Removing default annotation from gp2 if present"
 kubectl patch storageclass gp2 \
   -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' \
   2>/dev/null && echo "  ✅ gp2 default annotation removed" \
-  || echo "  gp2 not present or already non-default — skipping"
+  || echo "  gp2 not present or already non-default"
 
-echo "==> Current StorageClasses:"
+echo "==> StorageClasses:"
 kubectl get storageclass
 
 # ════════════════════════════════════════
@@ -482,7 +464,6 @@ echo "════════════════════════�
 echo " NODE CAPACITY CHECK"
 echo "══════════════════════════════════════"
 
-echo "==> Current nodes and allocatable capacity:"
 kubectl get nodes -o custom-columns=\
 "NAME:.metadata.name,\
 STATUS:.status.conditions[-1].type,\
@@ -491,7 +472,6 @@ MEM:.status.allocatable.memory,\
 ZONE:.metadata.labels.topology\.kubernetes\.io/zone"
 
 echo ""
-echo "==> Subnet discovery (karpenter.sh/discovery tag):"
 aws ec2 describe-subnets \
   --region "$REGION" \
   --filters "Name=tag:karpenter.sh/discovery,Values=${CLUSTER_NAME}" \
@@ -499,14 +479,12 @@ aws ec2 describe-subnets \
   --output table 2>/dev/null \
   || echo "  ⚠️  No subnets tagged karpenter.sh/discovery=${CLUSTER_NAME}"
 
-echo ""
-echo "==> Security group discovery (karpenter.sh/discovery tag):"
 aws ec2 describe-security-groups \
   --region "$REGION" \
   --filters "Name=tag:karpenter.sh/discovery,Values=${CLUSTER_NAME}" \
   --query 'SecurityGroups[].{ID:GroupId,Name:GroupName}' \
   --output table 2>/dev/null \
-  || echo "  ⚠️  No security groups tagged karpenter.sh/discovery=${CLUSTER_NAME}"
+  || echo "  ⚠️  No SGs tagged karpenter.sh/discovery=${CLUSTER_NAME}"
 
 # ════════════════════════════════════════
 # OBSERVABILITY STACK
@@ -531,8 +509,6 @@ install_or_upgrade kube-prometheus-stack "$OBS_NAMESPACE" \
   --set grafana.persistence.storageClassName=gp3 \
   --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=gp3 \
   --set prometheus.prometheusSpec.retention=30d
-
-echo "  Waiting for kube-prometheus-stack pods"
 wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
 
 echo "==> Deploying elasticsearch"
@@ -545,8 +521,6 @@ install_or_upgrade elasticsearch "$OBS_NAMESPACE" \
   --set esJavaOpts="-Xmx512m -Xms512m" \
   --set volumeClaimTemplate.storageClassName=gp3 \
   --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
-
-echo "  Waiting for elasticsearch pods"
 wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
 
 echo "==> Deploying kibana"
@@ -555,8 +529,6 @@ install_or_upgrade kibana "$OBS_NAMESPACE" \
   --version 8.5.1 \
   --timeout 10m \
   --set "elasticsearchHosts=http://elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local:9200"
-
-echo "  Waiting for kibana pods"
 wait_for_pods "$OBS_NAMESPACE" "kibana" 600
 
 echo "==> Deploying otel-collector"
@@ -566,8 +538,6 @@ install_or_upgrade otel-collector "$OBS_NAMESPACE" \
   --timeout 5m \
   --set mode=deployment \
   --set image.repository=otel/opentelemetry-collector-contrib
-
-echo "  Waiting for otel-collector pods"
 wait_for_pods "$OBS_NAMESPACE" "otel-collector" 300
 
 echo "==> Deploying jaeger"
@@ -581,8 +551,6 @@ install_or_upgrade jaeger "$OBS_NAMESPACE" \
   --set "storage.elasticsearch.host=elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local" \
   --set storage.elasticsearch.port=9200 \
   --set agent.enabled=false
-
-echo "  Waiting for jaeger pods"
 wait_for_pods "$OBS_NAMESPACE" "jaeger" 300
 
 echo "==> Deploying fluent-bit"
@@ -590,8 +558,6 @@ install_or_upgrade fluent-bit "$OBS_NAMESPACE" \
   fluent/fluent-bit \
   --version 0.46.7 \
   --timeout 5m
-
-echo "  Waiting for fluent-bit pods"
 wait_for_pods "$OBS_NAMESPACE" "fluent-bit" 300
 
 # ════════════════════════════════════════
@@ -604,14 +570,15 @@ echo "════════════════════════�
 echo ""
 echo "Karpenter:"
 helm status karpenter -n kube-system --output json \
-  | python3 -c "import sys,json; d=json.load(sys.stdin); \
-      print('  status :', d['info']['status'])"
+  | python3 -c "import sys,json; \
+      print('  status:', json.load(sys.stdin)['info']['status'])"
 
 echo ""
 echo "Observability:"
 for release in kube-prometheus-stack elasticsearch kibana \
                otel-collector jaeger fluent-bit; do
-  STATUS=$(helm status "$release" -n "$OBS_NAMESPACE" --output json 2>/dev/null \
+  STATUS=$(helm status "$release" -n "$OBS_NAMESPACE" \
+    --output json 2>/dev/null \
     | python3 -c "import sys,json; \
         print(json.load(sys.stdin)['info']['status'])" \
     2>/dev/null || echo "not-found")
