@@ -18,11 +18,9 @@ aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER_NAME"
 echo "==> Verifying cluster connectivity"
 kubectl get nodes --no-headers | awk '{print "  node:", $1, $2}'
 
-echo "==> Node labels and taints"
-kubectl get nodes -o custom-columns=\
-"NAME:.metadata.name,\
-LABELS:.metadata.labels,\
-TAINTS:.spec.taints" 2>/dev/null || true
+echo "==> Node taints"
+kubectl get nodes \
+  -o custom-columns="NAME:.metadata.name,TAINTS:.spec.taints" 2>/dev/null || true
 
 echo "==> Adding Helm repos"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -36,6 +34,35 @@ echo "  Repos updated"
 # ════════════════════════════════════════
 # HELPERS
 # ════════════════════════════════════════
+debug_namespace() {
+  local ns=$1
+  echo ""
+  echo "  ══ DEBUG $ns ══"
+  echo "  --- all resources ---"
+  kubectl get all -n "$ns" 2>/dev/null || true
+  echo "  --- replicaset events (why pods not created) ---"
+  kubectl describe replicasets -n "$ns" 2>/dev/null \
+    | grep -A 10 "Events:" || echo "  no replicasets"
+  echo "  --- statefulset events ---"
+  kubectl describe statefulsets -n "$ns" 2>/dev/null \
+    | grep -A 10 "Events:" || echo "  no statefulsets"
+  echo "  --- pvcs ---"
+  kubectl get pvc -n "$ns" 2>/dev/null || true
+  echo "  --- namespace events ---"
+  kubectl get events -n "$ns" \
+    --sort-by='.lastTimestamp' 2>/dev/null | tail -20 || true
+  echo "  --- mutating webhooks (may block pod creation) ---"
+  kubectl get mutatingwebhookconfiguration 2>/dev/null | head -20 || true
+  echo "  --- karpenter nodeclaims ---"
+  kubectl get nodeclaims 2>/dev/null || echo "  none"
+  echo "  --- karpenter logs ---"
+  kubectl logs -n kube-system \
+    -l app.kubernetes.io/name=karpenter \
+    --tail=15 2>/dev/null || true
+  echo "  ══ END DEBUG ══"
+  echo ""
+}
+
 wait_for_pods() {
   local namespace=$1
   local description=$2
@@ -43,7 +70,7 @@ wait_for_pods() {
   local elapsed=0
   local interval=30
 
-  echo "  Polling $description pods in $namespace (timeout ${timeout_seconds}s)"
+  echo "  Polling $description (timeout ${timeout_seconds}s)"
 
   while [[ $elapsed -lt $timeout_seconds ]]; do
     local total ready pending failed
@@ -68,32 +95,28 @@ wait_for_pods() {
       return 0
     fi
 
-    if (( elapsed % 60 == 0 && elapsed > 0 )); then
+    if [[ $elapsed -eq 60 && "$total" -eq "0" ]]; then
+      echo "  ⚠️  total=0 after 60s — full debug:"
+      debug_namespace "$namespace"
+    fi
+
+    if (( elapsed % 120 == 0 && elapsed > 60 )); then
       echo "  --- pod list ---"
-      kubectl get pods -n "$namespace" --no-headers 2>/dev/null || true
-      echo "  --- pvc status ---"
-      kubectl get pvc  -n "$namespace" --no-headers 2>/dev/null || true
+      kubectl get pods -n "$namespace" -o wide --no-headers 2>/dev/null || true
       echo "  --- scheduling events ---"
       kubectl get events -n "$namespace" \
         --field-selector reason=FailedScheduling \
         --sort-by='.lastTimestamp' 2>/dev/null | tail -8 || true
-      echo "  --- karpenter nodeclaims ---"
-      kubectl get nodeclaims 2>/dev/null | head -10 || true
-      echo "  --- karpenter logs (provisioning) ---"
-      kubectl logs -n kube-system \
-        -l app.kubernetes.io/name=karpenter \
-        --tail=10 2>/dev/null | grep -i "launch\|provision\|node\|error" || true
+      echo "  --- nodeclaims ---"
+      kubectl get nodeclaims 2>/dev/null || true
     fi
 
     sleep $interval
     elapsed=$(( elapsed + interval ))
   done
 
-  echo "  ❌ Pods not Ready after ${timeout_seconds}s — full dump:"
-  kubectl get pods   -n "$namespace"
-  kubectl get pvc    -n "$namespace" 2>/dev/null || true
-  kubectl get events -n "$namespace" \
-    --sort-by='.lastTimestamp' | tail -30
+  echo "  ❌ Timeout — full debug:"
+  debug_namespace "$namespace"
   return 1
 }
 
@@ -107,96 +130,61 @@ echo "════════════════════════�
 
 PREREQ_FAILED=0
 
-echo "==> Checking SQS queue: ${CLUSTER_NAME}-karpenter"
 SQS_URL=$(aws sqs get-queue-url \
   --queue-name "${CLUSTER_NAME}-karpenter" \
   --region "$REGION" \
   --query 'QueueUrl' \
   --output text 2>/dev/null || echo "MISSING")
+[[ "$SQS_URL" == "MISSING" ]] \
+  && echo "  ❌ SQS NOT FOUND" && PREREQ_FAILED=1 \
+  || echo "  ✅ SQS: $SQS_URL"
 
-if [[ "$SQS_URL" == "MISSING" ]]; then
-  echo "  ❌ SQS queue ${CLUSTER_NAME}-karpenter NOT FOUND"
-  PREREQ_FAILED=1
-else
-  echo "  ✅ SQS queue exists: $SQS_URL"
-fi
-
-echo "==> Checking IAM instance profile: ${CLUSTER_NAME}-karpenter-node"
 PROFILE_ARN=$(aws iam get-instance-profile \
   --instance-profile-name "${CLUSTER_NAME}-karpenter-node" \
   --query 'InstanceProfile.Arn' \
   --output text 2>/dev/null || echo "MISSING")
+[[ "$PROFILE_ARN" == "MISSING" ]] \
+  && echo "  ❌ Instance profile NOT FOUND" && PREREQ_FAILED=1 \
+  || echo "  ✅ Instance profile: $PROFILE_ARN"
 
-if [[ "$PROFILE_ARN" == "MISSING" ]]; then
-  echo "  ❌ Instance profile ${CLUSTER_NAME}-karpenter-node NOT FOUND"
-  PREREQ_FAILED=1
-else
-  echo "  ✅ Instance profile exists: $PROFILE_ARN"
-fi
-
-echo "==> Checking IAM role: ${CLUSTER_NAME}-karpenter-controller"
 ROLE_ARN=$(aws iam get-role \
   --role-name "${CLUSTER_NAME}-karpenter-controller" \
-  --query 'Role.Arn' \
-  --output text 2>/dev/null || echo "MISSING")
+  --query 'Role.Arn' --output text 2>/dev/null || echo "MISSING")
+[[ "$ROLE_ARN" == "MISSING" ]] \
+  && echo "  ❌ IAM role NOT FOUND" && PREREQ_FAILED=1 \
+  || echo "  ✅ IAM role: $ROLE_ARN"
 
-if [[ "$ROLE_ARN" == "MISSING" ]]; then
-  echo "  ❌ IAM role ${CLUSTER_NAME}-karpenter-controller NOT FOUND"
-  PREREQ_FAILED=1
-else
-  echo "  ✅ IAM role exists: $ROLE_ARN"
-fi
-
-echo "==> Checking Karpenter service account IRSA annotation"
 SA_ROLE=$(kubectl get serviceaccount karpenter -n kube-system \
   -o jsonpath='{.metadata.annotations.eks\.amazonaws\.com/role-arn}' \
   2>/dev/null || echo "MISSING")
+[[ "$SA_ROLE" == "MISSING" || -z "$SA_ROLE" ]] \
+  && echo "  ❌ IRSA missing" && PREREQ_FAILED=1 \
+  || echo "  ✅ IRSA: $SA_ROLE"
 
-if [[ "$SA_ROLE" == "MISSING" || -z "$SA_ROLE" ]]; then
-  echo "  ❌ Service account karpenter missing IRSA annotation"
-  PREREQ_FAILED=1
-else
-  echo "  ✅ IRSA annotation: $SA_ROLE"
-fi
-
-if [[ "$PREREQ_FAILED" == "1" ]]; then
-  echo "  ❌ Prerequisites missing — ensure stage2-apply completed then re-run"
-  exit 1
-fi
+[[ "$PREREQ_FAILED" == "1" ]] && exit 1
 echo "  ✅ All prerequisites verified"
 
 # ════════════════════════════════════════
-# PATCH SQS PERMISSIONS
+# IAM PATCHES
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
-echo " IAM PERMISSION PATCHES"
+echo " IAM PATCHES"
 echo "══════════════════════════════════════"
 
 SQS_QUEUE_ARN=$(aws sqs get-queue-attributes \
-  --queue-url "$SQS_URL" \
-  --attribute-names QueueArn \
-  --query 'Attributes.QueueArn' \
-  --output text)
-echo "  Queue ARN: $SQS_QUEUE_ARN"
+  --queue-url "$SQS_URL" --attribute-names QueueArn \
+  --query 'Attributes.QueueArn' --output text)
 
 aws iam put-role-policy \
   --role-name "${CLUSTER_NAME}-karpenter-controller" \
   --policy-name "KarpenterSQSInterruption" \
   --policy-document "{
-    \"Version\": \"2012-10-17\",
-    \"Statement\": [{
-      \"Sid\": \"KarpenterSQSInterruption\",
-      \"Effect\": \"Allow\",
-      \"Action\": [
-        \"sqs:GetQueueUrl\",
-        \"sqs:GetQueueAttributes\",
-        \"sqs:ReceiveMessage\",
-        \"sqs:DeleteMessage\"
-      ],
-      \"Resource\": \"${SQS_QUEUE_ARN}\"
-    }]
-  }"
+    \"Version\":\"2012-10-17\",
+    \"Statement\":[{\"Effect\":\"Allow\",
+    \"Action\":[\"sqs:GetQueueUrl\",\"sqs:GetQueueAttributes\",
+               \"sqs:ReceiveMessage\",\"sqs:DeleteMessage\"],
+    \"Resource\":\"${SQS_QUEUE_ARN}\"}]}"
 echo "  ✅ SQS permissions patched"
 
 # ════════════════════════════════════════
@@ -208,33 +196,22 @@ echo " KARPENTER"
 echo "══════════════════════════════════════"
 
 CLUSTER_ENDPOINT=$(aws eks describe-cluster \
-  --name "$CLUSTER_NAME" \
-  --region "$REGION" \
-  --query "cluster.endpoint" \
-  --output text)
-echo "  Cluster endpoint: $CLUSTER_ENDPOINT"
+  --name "$CLUSTER_NAME" --region "$REGION" \
+  --query "cluster.endpoint" --output text)
 
-# ✅ FIX: Delete EC2NodeClass BEFORE Karpenter reinstall
-# so the CRD is gone before the new controller starts
-# This prevents the race where the new Karpenter process
-# starts, loses EC2NodeClass mid-reconcile, and the
-# provisioner loop gets stuck not watching for new pods
-echo "==> Deleting EC2NodeClass BEFORE Karpenter reinstall"
+echo "==> Cleaning up before install"
 kubectl delete ec2nodeclass default --ignore-not-found
 kubectl delete nodepool   default --ignore-not-found
-echo "  Waiting 5s for CRD objects to clear"
 sleep 5
 
-KARPENTER_STATUS=$(helm status karpenter -n kube-system \
+KSTATUS=$(helm status karpenter -n kube-system \
   --output json 2>/dev/null \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['status'])" \
   2>/dev/null || echo "not-found")
-
-if [[ "$KARPENTER_STATUS" != "not-found" ]]; then
-  echo "  Uninstalling existing karpenter (status: $KARPENTER_STATUS)"
+[[ "$KSTATUS" != "not-found" ]] && {
   helm uninstall karpenter -n kube-system --ignore-not-found
   sleep 5
-fi
+}
 
 echo "  Installing karpenter"
 helm install karpenter \
@@ -254,31 +231,16 @@ helm install karpenter \
   --set "controller.resources.limits.cpu=500m" \
   --set "controller.resources.limits.memory=512Mi"
 
-echo "  Current pod status:"
-kubectl get pods -n kube-system \
-  -l app.kubernetes.io/name=karpenter -o wide || true
-
-kubectl wait pod \
-  -n kube-system \
+kubectl wait pod -n kube-system \
   -l app.kubernetes.io/name=karpenter \
-  --for=condition=Ready \
-  --timeout=300s \
-  && echo "  ✅ Karpenter pod Ready" \
-  || {
-    echo "  ❌ Karpenter pod not Ready"
-    kubectl describe pod -n kube-system \
-      -l app.kubernetes.io/name=karpenter
-    kubectl logs -n kube-system \
-      -l app.kubernetes.io/name=karpenter --tail=50 2>/dev/null || true
-    exit 1
-  }
+  --for=condition=Ready --timeout=300s \
+  && echo "  ✅ Karpenter Ready" \
+  || { kubectl describe pod -n kube-system \
+         -l app.kubernetes.io/name=karpenter; exit 1; }
 
-echo "  Waiting 90s for Karpenter webhook to fully register"
+echo "  Waiting 90s for webhook registration"
 sleep 90
 
-# Apply EC2NodeClass and NodePool AFTER webhook is ready
-# EC2NodeClass was already deleted above — fresh create only
-echo "==> Applying EC2NodeClass with instanceProfile"
 kubectl apply -f - <<EOF
 apiVersion: karpenter.k8s.aws/v1
 kind: EC2NodeClass
@@ -303,7 +265,6 @@ spec:
         deleteOnTermination: true
 EOF
 
-echo "==> Applying NodePool"
 kubectl apply -f - <<EOF
 apiVersion: karpenter.sh/v1
 kind: NodePool
@@ -311,9 +272,6 @@ metadata:
   name: default
 spec:
   template:
-    metadata:
-      annotations:
-        karpenter.sh/expire-after: 720h
     spec:
       nodeClassRef:
         group: karpenter.k8s.aws
@@ -340,61 +298,39 @@ spec:
     consolidateAfter: 30s
 EOF
 
-echo "  EC2NodeClass + NodePool applied"
-
-echo "==> Waiting for EC2NodeClass Ready=True (max 3 min)"
+echo "==> Waiting for EC2NodeClass Ready=True"
 EC2_READY=false
 for i in $(seq 1 18); do
-  IP_STATUS=$(kubectl get ec2nodeclass default \
-    -o jsonpath='{.status.conditions[?(@.type=="InstanceProfileReady")].status}' \
-    2>/dev/null || echo "Unknown")
   NC_STATUS=$(kubectl get ec2nodeclass default \
     -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' \
     2>/dev/null || echo "Unknown")
-  echo "  [$(( i * 10 ))s] InstanceProfileReady=${IP_STATUS}  Ready=${NC_STATUS}"
-  if [[ "$NC_STATUS" == "True" ]]; then
-    echo "  ✅ EC2NodeClass Ready — Karpenter can provision nodes"
-    EC2_READY=true
-    break
-  fi
+  echo "  [$(( i * 10 ))s] Ready=${NC_STATUS}"
+  [[ "$NC_STATUS" == "True" ]] && { EC2_READY=true; break; }
   sleep 10
 done
 
-if [[ "$EC2_READY" == "false" ]]; then
-  echo "  ❌ EC2NodeClass not Ready after 3 min"
-  kubectl describe ec2nodeclass default 2>/dev/null || true
-  kubectl logs -n kube-system \
-    -l app.kubernetes.io/name=karpenter --tail=30 2>/dev/null || true
+[[ "$EC2_READY" == "false" ]] && {
+  kubectl describe ec2nodeclass default
   exit 1
-fi
-
-kubectl get nodepool default 2>/dev/null || true
-echo "  Pausing 20s for NodePool to reach Ready"
+}
+echo "  ✅ EC2NodeClass Ready"
+kubectl get nodepool default
 sleep 20
 
 # ════════════════════════════════════════
-# STORAGE PREREQUISITES
+# STORAGE
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
-echo " STORAGE PREREQUISITES"
+echo " STORAGE"
 echo "══════════════════════════════════════"
 
-echo "==> Verifying EBS CSI driver"
-kubectl wait pod \
-  -n kube-system \
+kubectl wait pod -n kube-system \
   -l app.kubernetes.io/name=aws-ebs-csi-driver \
-  --for=condition=Ready \
-  --timeout=120s \
-  && echo "  ✅ EBS CSI driver Ready" \
-  || kubectl get pods -n kube-system | grep ebs \
-  || echo "  ❌ No EBS CSI pods found"
+  --for=condition=Ready --timeout=120s \
+  && echo "  ✅ EBS CSI Ready" || echo "  ⚠️  EBS CSI check failed"
 
-echo "==> Ensuring gp3 StorageClass exists"
-if kubectl get storageclass gp3 &>/dev/null; then
-  echo "  ✅ gp3 StorageClass already exists"
-else
-  kubectl apply -f - <<EOF
+kubectl get storageclass gp3 &>/dev/null || kubectl apply -f - <<EOF
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -409,63 +345,20 @@ volumeBindingMode: WaitForFirstConsumer
 reclaimPolicy: Retain
 allowVolumeExpansion: true
 EOF
-  echo "  ✅ gp3 StorageClass created"
-fi
 
 kubectl patch storageclass gp2 \
   -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' \
-  2>/dev/null && echo "  ✅ gp2 default annotation removed" \
-  || echo "  gp2 not present or already non-default"
-
-echo "==> StorageClasses:"
+  2>/dev/null || true
 kubectl get storageclass
 
 # ════════════════════════════════════════
-# NODE CAPACITY + TAINT CHECK
-# ════════════════════════════════════════
-echo ""
-echo "══════════════════════════════════════"
-echo " NODE CAPACITY CHECK"
-echo "══════════════════════════════════════"
-
-echo "==> Node capacity:"
-kubectl get nodes -o custom-columns=\
-"NAME:.metadata.name,\
-STATUS:.status.conditions[-1].type,\
-CPU:.status.allocatable.cpu,\
-MEM:.status.allocatable.memory,\
-ZONE:.metadata.labels.topology\.kubernetes\.io/zone"
-
-echo ""
-echo "==> Node taints (observability pods must tolerate these or Karpenter provisions new nodes):"
-kubectl get nodes \
-  -o custom-columns="NAME:.metadata.name,TAINTS:.spec.taints" \
-  2>/dev/null || true
-
-echo ""
-aws ec2 describe-subnets \
-  --region "$REGION" \
-  --filters "Name=tag:karpenter.sh/discovery,Values=${CLUSTER_NAME}" \
-  --query 'Subnets[].{ID:SubnetId,AZ:AvailabilityZone,CIDR:CidrBlock}' \
-  --output table 2>/dev/null \
-  || echo "  ⚠️  No subnets tagged karpenter.sh/discovery=${CLUSTER_NAME}"
-
-aws ec2 describe-security-groups \
-  --region "$REGION" \
-  --filters "Name=tag:karpenter.sh/discovery,Values=${CLUSTER_NAME}" \
-  --query 'SecurityGroups[].{ID:GroupId,Name:GroupName}' \
-  --output table 2>/dev/null \
-  || echo "  ⚠️  No SGs tagged karpenter.sh/discovery=${CLUSTER_NAME}"
-
-# ════════════════════════════════════════
-# NAMESPACE CLEANUP
+# CLEANUP
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
 echo " NAMESPACE CLEANUP"
 echo "══════════════════════════════════════"
 
-echo "==> Uninstalling all previous Helm releases in $OBS_NAMESPACE"
 for release in kube-prometheus-stack elasticsearch kibana \
                otel-collector jaeger fluent-bit; do
   STATUS=$(helm status "$release" -n "$OBS_NAMESPACE" \
@@ -473,33 +366,34 @@ for release in kube-prometheus-stack elasticsearch kibana \
     | python3 -c "import sys,json; \
         print(json.load(sys.stdin)['info']['status'])" \
     2>/dev/null || echo "not-found")
-  if [[ "$STATUS" != "not-found" ]]; then
-    echo "  Uninstalling $release (was: $STATUS)"
+  [[ "$STATUS" != "not-found" ]] && {
+    echo "  Uninstalling $release"
     helm uninstall "$release" -n "$OBS_NAMESPACE" --ignore-not-found
-  else
-    echo "  $release — not installed, skipping"
-  fi
+  }
 done
 
-echo "==> Deleting all PVCs in $OBS_NAMESPACE"
-PVC_COUNT=$(kubectl get pvc -n "$OBS_NAMESPACE" \
-  --no-headers 2>/dev/null | wc -l | tr -d ' ')
-if [[ "$PVC_COUNT" -gt "0" ]]; then
-  echo "  Found $PVC_COUNT PVC(s) — deleting"
-  kubectl delete pvc --all -n "$OBS_NAMESPACE" 2>/dev/null || true
-  echo "  ✅ PVCs deleted"
-else
-  echo "  No PVCs found — namespace is clean"
-fi
+kubectl delete pvc --all -n "$OBS_NAMESPACE" 2>/dev/null || true
+# ✅ Remove any stale webhooks from previous failed installs
+# These block pod creation silently — pods never reach Pending
+kubectl delete mutatingwebhookconfiguration \
+  kube-prometheus-stack-admission 2>/dev/null || true
+kubectl delete validatingwebhookconfiguration \
+  kube-prometheus-stack-admission 2>/dev/null || true
 
-echo "==> Waiting 10s for cleanup to propagate"
 sleep 10
-
 kubectl create namespace "$OBS_NAMESPACE" \
   --dry-run=client -o yaml | kubectl apply -f -
 
+echo "==> Checking for any blocking webhooks before install:"
+kubectl get mutatingwebhookconfiguration 2>/dev/null || true
+kubectl get validatingwebhookconfiguration 2>/dev/null || true
+
 # ════════════════════════════════════════
-# OBSERVABILITY STACK
+# OBSERVABILITY
+# No CriticalAddonsOnly tolerations —
+# pods go to Karpenter-provisioned nodes
+# Webhooks fully disabled to prevent
+# silent pod creation blocking
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
@@ -514,11 +408,31 @@ helm install kube-prometheus-stack \
   --timeout 30m \
   --set prometheusOperator.admissionWebhooks.enabled=false \
   --set prometheusOperator.admissionWebhooks.patch.enabled=false \
+  --set prometheusOperator.admissionWebhooks.certManager.enabled=false \
   --set "grafana.adminPassword=${GRAFANA_PASSWORD}" \
   --set grafana.persistence.enabled=true \
   --set grafana.persistence.storageClassName=gp3 \
   --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=gp3 \
   --set prometheus.prometheusSpec.retention=30d
+
+# ✅ Print state immediately — before polling
+echo ""
+echo "==> State 10s after helm install:"
+sleep 10
+echo "  --- all resources ---"
+kubectl get all -n "$OBS_NAMESPACE" 2>/dev/null || true
+echo "  --- pvcs ---"
+kubectl get pvc -n "$OBS_NAMESPACE" 2>/dev/null || true
+echo "  --- events ---"
+kubectl get events -n "$OBS_NAMESPACE" \
+  --sort-by='.lastTimestamp' 2>/dev/null | tail -15 || true
+echo "  --- replicaset describe (why no pods) ---"
+kubectl describe replicasets -n "$OBS_NAMESPACE" 2>/dev/null \
+  | grep -A 15 "Events:" || echo "  no replicasets yet"
+echo "  --- mutating webhooks ---"
+kubectl get mutatingwebhookconfiguration 2>/dev/null | grep -i prom || true
+echo ""
+
 wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
 
 echo "==> Deploying elasticsearch"
@@ -582,13 +496,7 @@ echo ""
 echo "══════════════════════════════════════"
 echo " DEPLOYMENT COMPLETE"
 echo "══════════════════════════════════════"
-echo ""
-echo "Karpenter:"
-helm status karpenter -n kube-system --output json \
-  | python3 -c "import sys,json; \
-      print('  status:', json.load(sys.stdin)['info']['status'])"
 
-echo ""
 echo "Observability:"
 for release in kube-prometheus-stack elasticsearch kibana \
                otel-collector jaeger fluent-bit; do
