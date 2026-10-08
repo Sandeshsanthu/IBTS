@@ -61,6 +61,51 @@ install_or_upgrade() {
   fi
 }
 
+# Wait for all pods in a namespace/selector to be Ready
+# Prints live status every 30s so we can see what is happening
+wait_for_pods() {
+  local namespace=$1
+  local label=$2
+  local timeout_seconds=${3:-900}
+  local elapsed=0
+  local interval=30
+
+  echo "  Waiting for pods -l $label in $namespace (timeout ${timeout_seconds}s)"
+  while [[ $elapsed -lt $timeout_seconds ]]; do
+    local total ready
+    total=$(kubectl get pods -n "$namespace" -l "$label" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    ready=$(kubectl get pods -n "$namespace" -l "$label" --no-headers 2>/dev/null \
+      | awk '$2~/^([0-9]+)\/\1$/ && $3=="Running"' | wc -l | tr -d ' ')
+
+    echo "  [${elapsed}s] pods ready: ${ready}/${total}"
+
+    if [[ "$total" -gt "0" && "$ready" -eq "$total" ]]; then
+      echo "  ✅ All pods Ready"
+      return 0
+    fi
+
+    # Print pending pod reasons every 60s
+    if (( elapsed % 60 == 0 && elapsed > 0 )); then
+      echo "  --- pending pod events ---"
+      kubectl get events -n "$namespace" \
+        --field-selector reason=FailedScheduling \
+        --sort-by='.lastTimestamp' 2>/dev/null | tail -5 || true
+      echo "  --- pod status ---"
+      kubectl get pods -n "$namespace" -l "$label" --no-headers 2>/dev/null || true
+    fi
+
+    sleep $interval
+    elapsed=$(( elapsed + interval ))
+  done
+
+  echo "  ❌ Pods not Ready after ${timeout_seconds}s — diagnostic dump:"
+  kubectl get pods -n "$namespace" --no-headers
+  kubectl get pvc -n "$namespace" 2>/dev/null || true
+  kubectl get events -n "$namespace" --sort-by='.lastTimestamp' | tail -30
+  kubectl describe pods -n "$namespace" -l "$label" | grep -A 10 "Events:" || true
+  return 1
+}
+
 # ════════════════════════════════════════
 # PREREQUISITE CHECKS
 # ════════════════════════════════════════
@@ -79,7 +124,7 @@ SQS_URL=$(aws sqs get-queue-url \
   --output text 2>/dev/null || echo "MISSING")
 
 if [[ "$SQS_URL" == "MISSING" ]]; then
-  echo "  ❌ SQS queue ${CLUSTER_NAME}-karpenter NOT FOUND — stage2 Terraform did not complete"
+  echo "  ❌ SQS queue ${CLUSTER_NAME}-karpenter NOT FOUND"
   PREREQ_FAILED=1
 else
   echo "  ✅ SQS queue exists: $SQS_URL"
@@ -111,11 +156,9 @@ else
 fi
 
 if [[ "$PREREQ_FAILED" == "1" ]]; then
-  echo ""
   echo "  ❌ Prerequisites missing — ensure stage2-apply completed then re-run"
   exit 1
 fi
-
 echo "  ✅ All prerequisites verified"
 
 # ════════════════════════════════════════
@@ -144,7 +187,7 @@ HAS_SQS=$(aws iam get-role \
   --output text 2>/dev/null | grep -c "sqs" || echo "0")
 
 if [[ "$HAS_SQS" == "0" ]]; then
-  echo "  ⚠️  Managed policy missing SQS — attaching inline policy as safety net"
+  echo "  ⚠️  Attaching inline SQS policy as safety net"
   aws iam put-role-policy \
     --role-name "${CLUSTER_NAME}-karpenter-controller" \
     --policy-name "KarpenterSQSInterruption" \
@@ -211,11 +254,8 @@ kubectl wait pod \
   && echo "  ✅ Karpenter pod Ready" \
   || {
     echo "  ❌ Karpenter pod not Ready after 20 min — debug info:"
-    echo "  --- pod status ---"
     kubectl get pods -n kube-system -l app.kubernetes.io/name=karpenter -o wide
-    echo "  --- describe ---"
     kubectl describe pod -n kube-system -l app.kubernetes.io/name=karpenter
-    echo "  --- logs ---"
     kubectl logs -n kube-system -l app.kubernetes.io/name=karpenter --tail=50 2>/dev/null || true
     exit 1
   }
@@ -267,10 +307,12 @@ spec:
       requirements:
         - key: karpenter.sh/capacity-type
           operator: In
-          values: ["spot"]
+          # ✅ FIXED: on-demand added as fallback — spot-only caused
+          # provisioning failures when spot capacity unavailable
+          values: ["spot", "on-demand"]
         - key: node.kubernetes.io/instance-type
           operator: In
-          values: ["t3.medium", "t3a.medium", "t3.large"]
+          values: ["t3.medium", "t3a.medium", "t3.large", "t3.xlarge"]
         - key: kubernetes.io/arch
           operator: In
           values: ["amd64"]
@@ -278,22 +320,25 @@ spec:
           operator: In
           values: ["${REGION}a", "${REGION}b"]
   limits:
-    cpu: "8"
-    memory: 16Gi
+    cpu: "16"
+    memory: 32Gi
   disruption:
     consolidationPolicy: WhenEmptyOrUnderutilized
     consolidateAfter: 30s
 EOF
 
 echo "  EC2NodeClass + NodePool applied"
+
+echo "==> Verifying Karpenter can discover subnets and security groups"
+kubectl logs -n kube-system \
+  -l app.kubernetes.io/name=karpenter \
+  --tail=20 2>/dev/null | grep -i "subnet\|security\|error\|warn" || true
+
 echo "  Pausing 30s for Karpenter controller to reconcile"
 sleep 30
 
 # ════════════════════════════════════════
 # STORAGE PREREQUISITES
-# Must exist before any Helm chart that
-# requests PVCs — Prometheus, Grafana,
-# Elasticsearch all need gp3 volumes
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
@@ -308,9 +353,8 @@ kubectl wait pod \
   --timeout=120s \
   && echo "  ✅ EBS CSI driver Ready" \
   || {
-    echo "  ⚠️  EBS CSI driver pods not found via label — checking all pods"
-    kubectl get pods -n kube-system | grep ebs || echo "  ❌ No EBS CSI pods found — PVCs will not bind"
-    kubectl get pods -n kube-system | grep ebs
+    echo "  ⚠️  EBS CSI driver label not matched — checking pods"
+    kubectl get pods -n kube-system | grep ebs || echo "  ❌ No EBS CSI pods found"
   }
 
 echo "==> Ensuring gp3 StorageClass exists"
@@ -347,6 +391,64 @@ echo "==> Current StorageClasses:"
 kubectl get storageclass
 
 # ════════════════════════════════════════
+# NODE CAPACITY CHECK
+# Verify Karpenter can provision before
+# starting long Helm installs
+# ════════════════════════════════════════
+echo ""
+echo "══════════════════════════════════════"
+echo " NODE CAPACITY CHECK"
+echo "══════════════════════════════════════"
+
+echo "==> Current nodes and allocatable capacity:"
+kubectl get nodes -o custom-columns=\
+"NAME:.metadata.name,\
+STATUS:.status.conditions[-1].type,\
+CPU:.status.allocatable.cpu,\
+MEM:.status.allocatable.memory,\
+ZONE:.metadata.labels.topology\.kubernetes\.io/zone"
+
+echo ""
+echo "==> Karpenter NodePool status:"
+kubectl get nodepool default -o jsonpath=\
+'{.status.conditions}' 2>/dev/null \
+  | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for c in data:
+    print(f\"  {c.get('type','?'):30s} {c.get('status','?'):8s} {c.get('message','')}\")
+" 2>/dev/null || kubectl get nodepool default 2>/dev/null || echo "  NodePool not found"
+
+echo ""
+echo "==> Karpenter EC2NodeClass status:"
+kubectl get ec2nodeclass default -o jsonpath=\
+'{.status.conditions}' 2>/dev/null \
+  | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for c in data:
+    print(f\"  {c.get('type','?'):30s} {c.get('status','?'):8s} {c.get('message','')}\")
+" 2>/dev/null || echo "  EC2NodeClass status unavailable"
+
+echo ""
+echo "==> Subnet discovery check (must have karpenter.sh/discovery tag):"
+aws ec2 describe-subnets \
+  --region "$REGION" \
+  --filters "Name=tag:karpenter.sh/discovery,Values=${CLUSTER_NAME}" \
+  --query 'Subnets[].{ID:SubnetId,AZ:AvailabilityZone,CIDR:CidrBlock}' \
+  --output table 2>/dev/null \
+  || echo "  ⚠️  No subnets found with tag karpenter.sh/discovery=${CLUSTER_NAME}"
+
+echo ""
+echo "==> Security group discovery check (must have karpenter.sh/discovery tag):"
+aws ec2 describe-security-groups \
+  --region "$REGION" \
+  --filters "Name=tag:karpenter.sh/discovery,Values=${CLUSTER_NAME}" \
+  --query 'SecurityGroups[].{ID:GroupId,Name:GroupName}' \
+  --output table 2>/dev/null \
+  || echo "  ⚠️  No security groups found with tag karpenter.sh/discovery=${CLUSTER_NAME}"
+
+# ════════════════════════════════════════
 # OBSERVABILITY STACK
 # ════════════════════════════════════════
 echo ""
@@ -357,18 +459,24 @@ echo "════════════════════════�
 kubectl create namespace "$OBS_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> Deploying kube-prometheus-stack"
+# ✅ CHANGED: removed --wait, polling manually via wait_for_pods
+# helm --wait has no visibility into WHY pods are stuck
+# manual polling prints events every 60s so failures are visible
 install_or_upgrade kube-prometheus-stack "$OBS_NAMESPACE" \
   prometheus-community/kube-prometheus-stack \
   --version 58.2.2 \
-  --timeout 15m \
+  --timeout 30m \
   --set prometheusOperator.admissionWebhooks.enabled=false \
   --set prometheusOperator.admissionWebhooks.patch.enabled=false \
   --set "grafana.adminPassword=${GRAFANA_PASSWORD}" \
   --set grafana.persistence.enabled=true \
   --set grafana.persistence.storageClassName=gp3 \
   --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=gp3 \
-  --set prometheus.prometheusSpec.retention=30d \
-  --wait
+  --set prometheus.prometheusSpec.retention=30d
+
+echo "  Waiting for kube-prometheus-stack pods"
+wait_for_pods "$OBS_NAMESPACE" "release=kube-prometheus-stack" 1800 \
+  || wait_for_pods "$OBS_NAMESPACE" "app.kubernetes.io/instance=kube-prometheus-stack" 300
 
 echo "==> Deploying elasticsearch"
 install_or_upgrade elasticsearch "$OBS_NAMESPACE" \
@@ -379,16 +487,20 @@ install_or_upgrade elasticsearch "$OBS_NAMESPACE" \
   --set minimumMasterNodes=1 \
   --set esJavaOpts="-Xmx512m -Xms512m" \
   --set volumeClaimTemplate.storageClassName=gp3 \
-  --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n" \
-  --wait
+  --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
+
+echo "  Waiting for elasticsearch pods"
+wait_for_pods "$OBS_NAMESPACE" "app=elasticsearch-master" 900
 
 echo "==> Deploying kibana"
 install_or_upgrade kibana "$OBS_NAMESPACE" \
   elastic/kibana \
   --version 8.5.1 \
   --timeout 10m \
-  --set "elasticsearchHosts=http://elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local:9200" \
-  --wait
+  --set "elasticsearchHosts=http://elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local:9200"
+
+echo "  Waiting for kibana pods"
+wait_for_pods "$OBS_NAMESPACE" "app=kibana" 600
 
 echo "==> Deploying otel-collector"
 install_or_upgrade otel-collector "$OBS_NAMESPACE" \
@@ -396,8 +508,10 @@ install_or_upgrade otel-collector "$OBS_NAMESPACE" \
   --version 0.91.0 \
   --timeout 5m \
   --set mode=deployment \
-  --set image.repository=otel/opentelemetry-collector-contrib \
-  --wait
+  --set image.repository=otel/opentelemetry-collector-contrib
+
+echo "  Waiting for otel-collector pods"
+wait_for_pods "$OBS_NAMESPACE" "app.kubernetes.io/name=opentelemetry-collector" 300
 
 echo "==> Deploying jaeger"
 install_or_upgrade jaeger "$OBS_NAMESPACE" \
@@ -409,15 +523,19 @@ install_or_upgrade jaeger "$OBS_NAMESPACE" \
   --set storage.type=elasticsearch \
   --set "storage.elasticsearch.host=elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local" \
   --set storage.elasticsearch.port=9200 \
-  --set agent.enabled=false \
-  --wait
+  --set agent.enabled=false
+
+echo "  Waiting for jaeger pods"
+wait_for_pods "$OBS_NAMESPACE" "app.kubernetes.io/name=jaeger" 300
 
 echo "==> Deploying fluent-bit"
 install_or_upgrade fluent-bit "$OBS_NAMESPACE" \
   fluent/fluent-bit \
   --version 0.46.7 \
-  --timeout 5m \
-  --wait
+  --timeout 5m
+
+echo "  Waiting for fluent-bit pods"
+wait_for_pods "$OBS_NAMESPACE" "app.kubernetes.io/name=fluent-bit" 300
 
 # ════════════════════════════════════════
 # SUMMARY
