@@ -20,7 +20,8 @@ kubectl get nodes --no-headers | awk '{print "  node:", $1, $2}'
 
 echo "==> Node taints"
 kubectl get nodes \
-  -o custom-columns="NAME:.metadata.name,TAINTS:.spec.taints" 2>/dev/null || true
+  -o custom-columns="NAME:.metadata.name,TAINTS:.spec.taints" \
+  2>/dev/null || true
 
 echo "==> Adding Helm repos"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -38,27 +39,17 @@ debug_namespace() {
   local ns=$1
   echo ""
   echo "  ══ DEBUG $ns ══"
-  echo "  --- all resources ---"
-  kubectl get all -n "$ns" 2>/dev/null || true
-  echo "  --- replicaset events (why pods not created) ---"
-  kubectl describe replicasets -n "$ns" 2>/dev/null \
-    | grep -A 10 "Events:" || echo "  no replicasets"
-  echo "  --- statefulset events ---"
-  kubectl describe statefulsets -n "$ns" 2>/dev/null \
-    | grep -A 10 "Events:" || echo "  no statefulsets"
-  echo "  --- pvcs ---"
-  kubectl get pvc -n "$ns" 2>/dev/null || true
-  echo "  --- namespace events ---"
-  kubectl get events -n "$ns" \
+  kubectl get all        -n "$ns" 2>/dev/null || true
+  kubectl get pvc        -n "$ns" 2>/dev/null || true
+  kubectl get quota      -n "$ns" 2>/dev/null || true
+  kubectl get limitrange -n "$ns" 2>/dev/null || true
+  kubectl get events     -n "$ns" \
     --sort-by='.lastTimestamp' 2>/dev/null | tail -20 || true
-  echo "  --- mutating webhooks (may block pod creation) ---"
-  kubectl get mutatingwebhookconfiguration 2>/dev/null | head -20 || true
-  echo "  --- karpenter nodeclaims ---"
-  kubectl get nodeclaims 2>/dev/null || echo "  none"
-  echo "  --- karpenter logs ---"
+  kubectl describe replicasets -n "$ns" 2>/dev/null \
+    | grep -A 10 "Events:" || true
+  kubectl get nodeclaims 2>/dev/null || echo "  no nodeclaims"
   kubectl logs -n kube-system \
-    -l app.kubernetes.io/name=karpenter \
-    --tail=15 2>/dev/null || true
+    -l app.kubernetes.io/name=karpenter --tail=10 2>/dev/null || true
   echo "  ══ END DEBUG ══"
   echo ""
 }
@@ -101,13 +92,10 @@ wait_for_pods() {
     fi
 
     if (( elapsed % 120 == 0 && elapsed > 60 )); then
-      echo "  --- pod list ---"
       kubectl get pods -n "$namespace" -o wide --no-headers 2>/dev/null || true
-      echo "  --- scheduling events ---"
       kubectl get events -n "$namespace" \
         --field-selector reason=FailedScheduling \
-        --sort-by='.lastTimestamp' 2>/dev/null | tail -8 || true
-      echo "  --- nodeclaims ---"
+        --sort-by='.lastTimestamp' 2>/dev/null | tail -5 || true
       kubectl get nodeclaims 2>/dev/null || true
     fi
 
@@ -115,7 +103,7 @@ wait_for_pods() {
     elapsed=$(( elapsed + interval ))
   done
 
-  echo "  ❌ Timeout — full debug:"
+  echo "  ❌ Timeout"
   debug_namespace "$namespace"
   return 1
 }
@@ -308,10 +296,8 @@ for i in $(seq 1 18); do
   [[ "$NC_STATUS" == "True" ]] && { EC2_READY=true; break; }
   sleep 10
 done
-
 [[ "$EC2_READY" == "false" ]] && {
-  kubectl describe ec2nodeclass default
-  exit 1
+  kubectl describe ec2nodeclass default; exit 1
 }
 echo "  ✅ EC2NodeClass Ready"
 kubectl get nodepool default
@@ -352,7 +338,7 @@ kubectl patch storageclass gp2 \
 kubectl get storageclass
 
 # ════════════════════════════════════════
-# CLEANUP
+# NAMESPACE CLEANUP
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
@@ -373,8 +359,7 @@ for release in kube-prometheus-stack elasticsearch kibana \
 done
 
 kubectl delete pvc --all -n "$OBS_NAMESPACE" 2>/dev/null || true
-# ✅ Remove any stale webhooks from previous failed installs
-# These block pod creation silently — pods never reach Pending
+
 kubectl delete mutatingwebhookconfiguration \
   kube-prometheus-stack-admission 2>/dev/null || true
 kubectl delete validatingwebhookconfiguration \
@@ -384,16 +369,47 @@ sleep 10
 kubectl create namespace "$OBS_NAMESPACE" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-echo "==> Checking for any blocking webhooks before install:"
-kubectl get mutatingwebhookconfiguration 2>/dev/null || true
-kubectl get validatingwebhookconfiguration 2>/dev/null || true
+# ════════════════════════════════════════
+# NAMESPACE QUOTA VERIFICATION
+# Terraform manages ResourceQuota + LimitRange
+# Script MUST NOT delete them — verify they
+# exist before proceeding with any helm install
+# ════════════════════════════════════════
+echo ""
+echo "══════════════════════════════════════"
+echo " NAMESPACE QUOTA VERIFICATION"
+echo "══════════════════════════════════════"
+
+QUOTA_COUNT=$(kubectl get resourcequota -n "$OBS_NAMESPACE" \
+  --no-headers 2>/dev/null | wc -l | tr -d ' ')
+LIMIT_COUNT=$(kubectl get limitrange -n "$OBS_NAMESPACE" \
+  --no-headers 2>/dev/null | wc -l | tr -d ' ')
+
+echo "  ResourceQuotas : $QUOTA_COUNT"
+echo "  LimitRanges    : $LIMIT_COUNT"
+
+kubectl get resourcequota -n "$OBS_NAMESPACE" 2>/dev/null || true
+kubectl get limitrange    -n "$OBS_NAMESPACE" 2>/dev/null || true
+
+if [[ "$QUOTA_COUNT" -gt "0" && "$LIMIT_COUNT" -eq "0" ]]; then
+  echo ""
+  echo "  ❌ ResourceQuota exists but NO LimitRange found"
+  echo "     Helm chart pods have no resource specs by default"
+  echo "     Quota rejects them at API server — pods never created"
+  echo "     Fix: push 05-namespaces.tf and run stage2-apply first"
+  echo ""
+  kubectl describe resourcequota -n "$OBS_NAMESPACE" 2>/dev/null || true
+  exit 1
+fi
+
+echo "  ✅ Namespace quota configuration OK — proceeding"
 
 # ════════════════════════════════════════
-# OBSERVABILITY
+# OBSERVABILITY STACK
 # No CriticalAddonsOnly tolerations —
 # pods go to Karpenter-provisioned nodes
-# Webhooks fully disabled to prevent
-# silent pod creation blocking
+# LimitRange (Terraform) injects defaults
+# so ResourceQuota never blocks pod creation
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
@@ -415,23 +431,11 @@ helm install kube-prometheus-stack \
   --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=gp3 \
   --set prometheus.prometheusSpec.retention=30d
 
-# ✅ Print state immediately — before polling
-echo ""
-echo "==> State 10s after helm install:"
-sleep 10
-echo "  --- all resources ---"
-kubectl get all -n "$OBS_NAMESPACE" 2>/dev/null || true
-echo "  --- pvcs ---"
-kubectl get pvc -n "$OBS_NAMESPACE" 2>/dev/null || true
-echo "  --- events ---"
+echo "==> State 15s after helm install:"
+sleep 15
+kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
 kubectl get events -n "$OBS_NAMESPACE" \
-  --sort-by='.lastTimestamp' 2>/dev/null | tail -15 || true
-echo "  --- replicaset describe (why no pods) ---"
-kubectl describe replicasets -n "$OBS_NAMESPACE" 2>/dev/null \
-  | grep -A 15 "Events:" || echo "  no replicasets yet"
-echo "  --- mutating webhooks ---"
-kubectl get mutatingwebhookconfiguration 2>/dev/null | grep -i prom || true
-echo ""
+  --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
 
 wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
 

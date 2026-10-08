@@ -38,7 +38,6 @@ resource "kubernetes_resource_quota" "ibts_observability" {
   }
   spec {
     hard = {
-      # ✅ INCREASED — breakdown of what each component needs:
       # kube-prometheus-stack (operator+prometheus+grafana
       #   +alertmanager+node-exporter+kube-state-metrics): ~2 CPU req / 4Gi mem req
       # elasticsearch:                                       0.1 CPU req / 1Gi   mem req
@@ -47,8 +46,8 @@ resource "kubernetes_resource_quota" "ibts_observability" {
       # jaeger:                                              0.05 CPU req / 128Mi mem req
       # fluent-bit (DaemonSet — 1 pod per node):             0.01 CPU req / 32Mi  mem req
       # ─────────────────────────────────────────────────────────────────────────────────
-      # TOTAL requests:  ~2.5 CPU / ~6Gi   → set headroom at 4 CPU / 8Gi
-      # TOTAL limits:    ~8   CPU / ~13Gi  → set headroom at 10 CPU / 14Gi
+      # TOTAL requests:  ~2.5 CPU / ~6Gi   → headroom at 4 CPU / 8Gi
+      # TOTAL limits:    ~8   CPU / ~13Gi  → headroom at 10 CPU / 14Gi
       "requests.cpu"    = "4"
       "requests.memory" = "8Gi"
       "limits.cpu"      = "10"
@@ -56,6 +55,89 @@ resource "kubernetes_resource_quota" "ibts_observability" {
       "pods"            = "50"
     }
   }
+}
+
+# LimitRange for ibts-observability
+# Automatically injects default requests/limits into any container
+# that does not declare them. Without this, ResourceQuota rejects
+# every Helm chart pod at the API server level — pods never reach
+# Pending, Karpenter sees nothing to provision, stack never deploys.
+resource "kubernetes_limit_range" "ibts_observability" {
+  metadata {
+    name      = "ibts-observability-limits"
+    namespace = kubernetes_namespace.ibts_observability.metadata[0].name
+  }
+
+  spec {
+    limit {
+      type = "Container"
+
+      # Injected into containers that declare no requests
+      # Used by Karpenter to size the worker node correctly
+      default_request = {
+        cpu    = "100m"
+        memory = "128Mi"
+      }
+
+      # Injected into containers that declare no limits
+      default = {
+        cpu    = "500m"
+        memory = "512Mi"
+      }
+
+      # Hard ceiling per container
+      # elasticsearch/prometheus can set higher via their own values
+      max = {
+        cpu    = "4"
+        memory = "8Gi"
+      }
+
+      # Floor — prevents zero-resource containers
+      min = {
+        cpu    = "10m"
+        memory = "32Mi"
+      }
+    }
+  }
+
+  depends_on = [kubernetes_namespace.ibts_observability]
+}
+
+# LimitRange for ibts-app
+# Same protection for application namespace
+resource "kubernetes_limit_range" "ibts_app" {
+  metadata {
+    name      = "ibts-app-limits"
+    namespace = kubernetes_namespace.ibts_app.metadata[0].name
+  }
+
+  spec {
+    limit {
+      type = "Container"
+
+      default_request = {
+        cpu    = "50m"
+        memory = "64Mi"
+      }
+
+      default = {
+        cpu    = "250m"
+        memory = "256Mi"
+      }
+
+      max = {
+        cpu    = "2"
+        memory = "4Gi"
+      }
+
+      min = {
+        cpu    = "10m"
+        memory = "32Mi"
+      }
+    }
+  }
+
+  depends_on = [kubernetes_namespace.ibts_app]
 }
 
 resource "kubernetes_service_account" "payment_switch" {
