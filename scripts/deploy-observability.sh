@@ -18,9 +18,11 @@ aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER_NAME"
 echo "==> Verifying cluster connectivity"
 kubectl get nodes --no-headers | awk '{print "  node:", $1, $2}'
 
-echo "==> Node labels (checking for purpose label)"
-kubectl get nodes --show-labels | grep -o 'purpose=[^ ,]*' \
-  || echo "  no purpose label found on any node"
+echo "==> Node labels and taints"
+kubectl get nodes -o custom-columns=\
+"NAME:.metadata.name,\
+LABELS:.metadata.labels,\
+TAINTS:.spec.taints" 2>/dev/null || true
 
 echo "==> Adding Helm repos"
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
@@ -34,27 +36,6 @@ echo "  Repos updated"
 # ════════════════════════════════════════
 # HELPERS
 # ════════════════════════════════════════
-install_or_upgrade() {
-  local release=$1
-  local namespace=$2
-  local chart=$3
-  shift 3
-
-  local status
-  status=$(helm status "$release" -n "$namespace" --output json 2>/dev/null \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['status'])" \
-    2>/dev/null || echo "not-found")
-
-  if [[ "$status" != "not-found" ]]; then
-    echo "  Uninstalling existing $release (status: $status) for clean install"
-    helm uninstall "$release" -n "$namespace" --ignore-not-found
-    sleep 5
-  fi
-
-  echo "  Installing $release"
-  helm install "$release" "$chart" -n "$namespace" "$@"
-}
-
 wait_for_pods() {
   local namespace=$1
   local description=$2
@@ -98,10 +79,10 @@ wait_for_pods() {
         --sort-by='.lastTimestamp' 2>/dev/null | tail -8 || true
       echo "  --- karpenter nodeclaims ---"
       kubectl get nodeclaims 2>/dev/null | head -10 || true
-      echo "  --- karpenter logs ---"
+      echo "  --- karpenter logs (provisioning) ---"
       kubectl logs -n kube-system \
         -l app.kubernetes.io/name=karpenter \
-        --tail=8 2>/dev/null || true
+        --tail=10 2>/dev/null | grep -i "launch\|provision\|node\|error" || true
     fi
 
     sleep $interval
@@ -199,7 +180,6 @@ SQS_QUEUE_ARN=$(aws sqs get-queue-attributes \
   --output text)
 echo "  Queue ARN: $SQS_QUEUE_ARN"
 
-echo "==> Patching SQS permissions (idempotent)"
 aws iam put-role-policy \
   --role-name "${CLUSTER_NAME}-karpenter-controller" \
   --policy-name "KarpenterSQSInterruption" \
@@ -234,8 +214,32 @@ CLUSTER_ENDPOINT=$(aws eks describe-cluster \
   --output text)
 echo "  Cluster endpoint: $CLUSTER_ENDPOINT"
 
-install_or_upgrade karpenter kube-system \
+# ✅ FIX: Delete EC2NodeClass BEFORE Karpenter reinstall
+# so the CRD is gone before the new controller starts
+# This prevents the race where the new Karpenter process
+# starts, loses EC2NodeClass mid-reconcile, and the
+# provisioner loop gets stuck not watching for new pods
+echo "==> Deleting EC2NodeClass BEFORE Karpenter reinstall"
+kubectl delete ec2nodeclass default --ignore-not-found
+kubectl delete nodepool   default --ignore-not-found
+echo "  Waiting 5s for CRD objects to clear"
+sleep 5
+
+KARPENTER_STATUS=$(helm status karpenter -n kube-system \
+  --output json 2>/dev/null \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['status'])" \
+  2>/dev/null || echo "not-found")
+
+if [[ "$KARPENTER_STATUS" != "not-found" ]]; then
+  echo "  Uninstalling existing karpenter (status: $KARPENTER_STATUS)"
+  helm uninstall karpenter -n kube-system --ignore-not-found
+  sleep 5
+fi
+
+echo "  Installing karpenter"
+helm install karpenter \
   "oci://public.ecr.aws/karpenter/karpenter" \
+  -n kube-system \
   --version "${KARPENTER_VERSION}" \
   --set serviceAccount.create=false \
   --set serviceAccount.name=karpenter \
@@ -269,13 +273,11 @@ kubectl wait pod \
     exit 1
   }
 
-echo "  Waiting 90s for Karpenter webhook to register"
+echo "  Waiting 90s for Karpenter webhook to fully register"
 sleep 90
 
-echo "==> Deleting existing EC2NodeClass (safe — recreated immediately below)"
-kubectl delete ec2nodeclass default --ignore-not-found
-sleep 5
-
+# Apply EC2NodeClass and NodePool AFTER webhook is ready
+# EC2NodeClass was already deleted above — fresh create only
 echo "==> Applying EC2NodeClass with instanceProfile"
 kubectl apply -f - <<EOF
 apiVersion: karpenter.k8s.aws/v1
@@ -419,19 +421,26 @@ echo "==> StorageClasses:"
 kubectl get storageclass
 
 # ════════════════════════════════════════
-# NODE CAPACITY CHECK
+# NODE CAPACITY + TAINT CHECK
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
 echo " NODE CAPACITY CHECK"
 echo "══════════════════════════════════════"
 
+echo "==> Node capacity:"
 kubectl get nodes -o custom-columns=\
 "NAME:.metadata.name,\
 STATUS:.status.conditions[-1].type,\
 CPU:.status.allocatable.cpu,\
 MEM:.status.allocatable.memory,\
 ZONE:.metadata.labels.topology\.kubernetes\.io/zone"
+
+echo ""
+echo "==> Node taints (observability pods must tolerate these or Karpenter provisions new nodes):"
+kubectl get nodes \
+  -o custom-columns="NAME:.metadata.name,TAINTS:.spec.taints" \
+  2>/dev/null || true
 
 echo ""
 aws ec2 describe-subnets \
@@ -486,8 +495,8 @@ fi
 echo "==> Waiting 10s for cleanup to propagate"
 sleep 10
 
-echo "==> Namespace state after cleanup:"
-kubectl get all -n "$OBS_NAMESPACE" 2>/dev/null || echo "  namespace is empty"
+kubectl create namespace "$OBS_NAMESPACE" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
 # ════════════════════════════════════════
 # OBSERVABILITY STACK
@@ -496,9 +505,6 @@ echo ""
 echo "══════════════════════════════════════"
 echo " OBSERVABILITY STACK"
 echo "══════════════════════════════════════"
-
-kubectl create namespace "$OBS_NAMESPACE" \
-  --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> Deploying kube-prometheus-stack"
 helm install kube-prometheus-stack \
