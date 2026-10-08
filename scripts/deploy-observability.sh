@@ -45,21 +45,14 @@ install_or_upgrade() {
     | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['status'])" \
     2>/dev/null || echo "not-found")
 
-  if [[ "$status" == "failed" || \
-        "$status" == "pending-install" || \
-        "$status" == "pending-upgrade" ]]; then
-    echo "  Cleaning up stuck release $release (status: $status)"
+  if [[ "$status" != "not-found" ]]; then
+    echo "  Uninstalling existing $release (status: $status) for clean install"
     helm uninstall "$release" -n "$namespace" --ignore-not-found
-    status="not-found"
+    sleep 5
   fi
 
-  if [[ "$status" == "not-found" ]]; then
-    echo "  Installing $release"
-    helm install "$release" "$chart" -n "$namespace" "$@"
-  else
-    echo "  Upgrading $release (current status: $status)"
-    helm upgrade "$release" "$chart" -n "$namespace" "$@"
-  fi
+  echo "  Installing $release"
+  helm install "$release" "$chart" -n "$namespace" "$@"
 }
 
 wait_for_pods() {
@@ -279,17 +272,8 @@ kubectl wait pod \
 echo "  Waiting 90s for Karpenter webhook to register"
 sleep 90
 
-# ════════════════════════════════════════
-# EC2NODECLASS
-# Delete before recreating — Karpenter does
-# not allow changing spec.role ↔ spec.instanceProfile
-# in-place. Delete is safe: existing nodes are
-# not terminated, only new provisioning pauses
-# briefly during recreation.
-# ════════════════════════════════════════
-echo "==> Deleting existing EC2NodeClass (required for role→instanceProfile change)"
+echo "==> Deleting existing EC2NodeClass (safe — recreated immediately below)"
 kubectl delete ec2nodeclass default --ignore-not-found
-echo "  Waiting 5s for deletion to propagate"
 sleep 5
 
 echo "==> Applying EC2NodeClass with instanceProfile"
@@ -301,8 +285,6 @@ metadata:
 spec:
   amiSelectorTerms:
     - alias: al2@latest
-  # Pre-existing Terraform-managed instance profile 
-  # explicitly bypasses the programmatic iam:GetInstanceProfile policy blocks
   instanceProfile: "${CLUSTER_NAME}-karpenter-node"
   subnetSelectorTerms:
     - tags:
@@ -313,7 +295,7 @@ spec:
   blockDeviceMappings:
     - deviceName: /dev/xvda
       ebs:
-        volumeSize: 25Gi
+        volumeSize: 20Gi
         volumeType: gp3
         encrypted: true
         deleteOnTermination: true
@@ -327,6 +309,9 @@ metadata:
   name: default
 spec:
   template:
+    metadata:
+      annotations:
+        karpenter.sh/expire-after: 720h
     spec:
       nodeClassRef:
         group: karpenter.k8s.aws
@@ -345,21 +330,16 @@ spec:
         - key: topology.kubernetes.io/zone
           operator: In
           values: ["${REGION}a", "${REGION}b"]
-  # 💡 FIXED: Increased ceilings from 16/32 to 32/64 to cleanly allocate whole Observability stacks
   limits:
-    cpu: "32"
-    memory: 64Gi
+    cpu: "16"
+    memory: 32Gi
   disruption:
     consolidationPolicy: WhenEmptyOrUnderutilized
     consolidateAfter: 30s
-    expireAfter: 720h  # ✅ FIXED: Correct v1.0.8 API native schema placement (720h = 30 days)
 EOF
 
 echo "  EC2NodeClass + NodePool applied"
 
-# ════════════════════════════════════════
-# GATE: EC2NodeClass must be Ready
-# ════════════════════════════════════════
 echo "==> Waiting for EC2NodeClass Ready=True (max 3 min)"
 EC2_READY=false
 for i in $(seq 1 18); do
@@ -379,7 +359,6 @@ for i in $(seq 1 18); do
 done
 
 if [[ "$EC2_READY" == "false" ]]; then
-  echo ""
   echo "  ❌ EC2NodeClass not Ready after 3 min"
   kubectl describe ec2nodeclass default 2>/dev/null || true
   kubectl logs -n kube-system \
@@ -388,7 +367,6 @@ if [[ "$EC2_READY" == "false" ]]; then
   exit 1
 fi
 
-echo "==> NodePool status:"
 kubectl get nodepool default 2>/dev/null || true
 echo "  Pausing 20s for NodePool to reach Ready"
 sleep 20
@@ -471,10 +449,55 @@ aws ec2 describe-security-groups \
   --output table 2>/dev/null \
   || echo "  ⚠️  No SGs tagged karpenter.sh/discovery=${CLUSTER_NAME}"
 
+# ════════════════════════════════════════
+# CLEAN NAMESPACE
+# Delete all stale PVCs and Helm releases
+# left behind from previous failed runs.
+# Stale Pending PVCs prevent pods from
+# starting even after a fresh Helm install.
+# ════════════════════════════════════════
+echo ""
+echo "══════════════════════════════════════"
+echo " NAMESPACE CLEANUP"
+echo "══════════════════════════════════════"
 
-# # ════════════════════════════════════════
-# # OBSERVABILITY STACK
-# # ════════════════════════════════════════
+echo "==> Uninstalling all previous Helm releases in $OBS_NAMESPACE"
+for release in kube-prometheus-stack elasticsearch kibana \
+               otel-collector jaeger fluent-bit; do
+  STATUS=$(helm status "$release" -n "$OBS_NAMESPACE" \
+    --output json 2>/dev/null \
+    | python3 -c "import sys,json; \
+        print(json.load(sys.stdin)['info']['status'])" \
+    2>/dev/null || echo "not-found")
+  if [[ "$STATUS" != "not-found" ]]; then
+    echo "  Uninstalling $release (was: $STATUS)"
+    helm uninstall "$release" -n "$OBS_NAMESPACE" --ignore-not-found
+  else
+    echo "  $release — not installed, skipping"
+  fi
+done
+
+echo "==> Deleting all PVCs in $OBS_NAMESPACE (stale PVCs block pod scheduling)"
+PVC_COUNT=$(kubectl get pvc -n "$OBS_NAMESPACE" \
+  --no-headers 2>/dev/null | wc -l | tr -d ' ')
+if [[ "$PVC_COUNT" -gt "0" ]]; then
+  echo "  Found $PVC_COUNT PVC(s) — deleting:"
+  kubectl get pvc -n "$OBS_NAMESPACE" --no-headers 2>/dev/null || true
+  kubectl delete pvc --all -n "$OBS_NAMESPACE" 2>/dev/null || true
+  echo "  ✅ PVCs deleted"
+else
+  echo "  No PVCs found — namespace is clean"
+fi
+
+echo "==> Waiting 10s for cleanup to propagate"
+sleep 10
+
+echo "==> Namespace state after cleanup:"
+kubectl get all -n "$OBS_NAMESPACE" 2>/dev/null || echo "  namespace is empty"
+
+# ════════════════════════════════════════
+# OBSERVABILITY STACK
+# ════════════════════════════════════════
 # echo ""
 # echo "══════════════════════════════════════"
 # echo " OBSERVABILITY STACK"
@@ -484,8 +507,9 @@ aws ec2 describe-security-groups \
 #   --dry-run=client -o yaml | kubectl apply -f -
 
 # echo "==> Deploying kube-prometheus-stack"
-# install_or_upgrade kube-prometheus-stack "$OBS_NAMESPACE" \
+# helm install kube-prometheus-stack "$OBS_NAMESPACE" \
 #   prometheus-community/kube-prometheus-stack \
+#   -n "$OBS_NAMESPACE" \
 #   --version 58.2.2 \
 #   --timeout 30m \
 #   --set prometheusOperator.admissionWebhooks.enabled=false \
@@ -498,8 +522,9 @@ aws ec2 describe-security-groups \
 # wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
 
 # echo "==> Deploying elasticsearch"
-# install_or_upgrade elasticsearch "$OBS_NAMESPACE" \
+# helm install elasticsearch "$OBS_NAMESPACE" \
 #   elastic/elasticsearch \
+#   -n "$OBS_NAMESPACE" \
 #   --version 8.5.1 \
 #   --timeout 15m \
 #   --set replicas=1 \
@@ -510,16 +535,18 @@ aws ec2 describe-security-groups \
 # wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
 
 # echo "==> Deploying kibana"
-# install_or_upgrade kibana "$OBS_NAMESPACE" \
+# helm install kibana "$OBS_NAMESPACE" \
 #   elastic/kibana \
+#   -n "$OBS_NAMESPACE" \
 #   --version 8.5.1 \
 #   --timeout 10m \
 #   --set "elasticsearchHosts=http://elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local:9200"
 # wait_for_pods "$OBS_NAMESPACE" "kibana" 600
 
 # echo "==> Deploying otel-collector"
-# install_or_upgrade otel-collector "$OBS_NAMESPACE" \
+# helm install otel-collector "$OBS_NAMESPACE" \
 #   open-telemetry/opentelemetry-collector \
+#   -n "$OBS_NAMESPACE" \
 #   --version 0.91.0 \
 #   --timeout 5m \
 #   --set mode=deployment \
@@ -527,8 +554,9 @@ aws ec2 describe-security-groups \
 # wait_for_pods "$OBS_NAMESPACE" "otel-collector" 300
 
 # echo "==> Deploying jaeger"
-# install_or_upgrade jaeger "$OBS_NAMESPACE" \
+# helm install jaeger "$OBS_NAMESPACE" \
 #   jaegertracing/jaeger \
+#   -n "$OBS_NAMESPACE" \
 #   --version 3.0.0 \
 #   --timeout 5m \
 #   --set provisionDataStore.cassandra=false \
@@ -540,8 +568,9 @@ aws ec2 describe-security-groups \
 # wait_for_pods "$OBS_NAMESPACE" "jaeger" 300
 
 # echo "==> Deploying fluent-bit"
-# install_or_upgrade fluent-bit "$OBS_NAMESPACE" \
+# helm install fluent-bit "$OBS_NAMESPACE" \
 #   fluent/fluent-bit \
+#   -n "$OBS_NAMESPACE" \
 #   --version 0.46.7 \
 #   --timeout 5m
 # wait_for_pods "$OBS_NAMESPACE" "fluent-bit" 300
