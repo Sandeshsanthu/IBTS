@@ -63,6 +63,7 @@ install_or_upgrade() {
 
 # ════════════════════════════════════════
 # PREREQUISITE CHECKS
+# Fail fast before any Helm install
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
@@ -120,6 +121,7 @@ echo "  ✅ All prerequisites verified"
 
 # ════════════════════════════════════════
 # PATCH SQS PERMISSIONS
+# Safety net in case managed policy lags
 # ════════════════════════════════════════
 echo ""
 echo "==> Verifying Karpenter controller role has SQS permissions"
@@ -258,11 +260,9 @@ spec:
   template:
     metadata:
       annotations:
-        # ✅ FIXED: expireAfter moved from spec.disruption to here in v1
         karpenter.sh/expire-after: 720h
     spec:
       nodeClassRef:
-        # ✅ FIXED: apiVersion removed from nodeClassRef in v1
         group: karpenter.k8s.aws
         kind: EC2NodeClass
         name: default
@@ -283,7 +283,8 @@ spec:
     cpu: "8"
     memory: 16Gi
   disruption:
-    consolidationPolicy: WhenUnderutilized
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 30s
 EOF
 
 echo "  EC2NodeClass + NodePool applied"
@@ -363,7 +364,9 @@ install_or_upgrade fluent-bit "$OBS_NAMESPACE" \
   --timeout 5m \
   --wait
 
-
+# ════════════════════════════════════════
+# SUMMARY
+# ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
 echo " DEPLOYMENT COMPLETE"
