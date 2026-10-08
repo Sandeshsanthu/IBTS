@@ -62,6 +62,118 @@ install_or_upgrade() {
 }
 
 # ════════════════════════════════════════
+# PREREQUISITE CHECKS
+# Fail fast before any Helm install
+# ════════════════════════════════════════
+echo ""
+echo "══════════════════════════════════════"
+echo " PREREQUISITE CHECKS"
+echo "══════════════════════════════════════"
+
+PREREQ_FAILED=0
+
+echo "==> Checking SQS queue: ${CLUSTER_NAME}-karpenter"
+SQS_URL=$(aws sqs get-queue-url \
+  --queue-name "${CLUSTER_NAME}-karpenter" \
+  --region "$REGION" \
+  --query 'QueueUrl' \
+  --output text 2>/dev/null || echo "MISSING")
+
+if [[ "$SQS_URL" == "MISSING" ]]; then
+  echo "  ❌ SQS queue ${CLUSTER_NAME}-karpenter NOT FOUND — stage2 Terraform did not complete"
+  PREREQ_FAILED=1
+else
+  echo "  ✅ SQS queue exists: $SQS_URL"
+fi
+
+echo "==> Checking IAM role: ${CLUSTER_NAME}-karpenter-controller"
+ROLE_ARN=$(aws iam get-role \
+  --role-name "${CLUSTER_NAME}-karpenter-controller" \
+  --query 'Role.Arn' \
+  --output text 2>/dev/null || echo "MISSING")
+
+if [[ "$ROLE_ARN" == "MISSING" ]]; then
+  echo "  ❌ IAM role ${CLUSTER_NAME}-karpenter-controller NOT FOUND"
+  PREREQ_FAILED=1
+else
+  echo "  ✅ IAM role exists: $ROLE_ARN"
+fi
+
+echo "==> Checking Karpenter service account IRSA annotation"
+SA_ROLE=$(kubectl get serviceaccount karpenter -n kube-system \
+  -o jsonpath='{.metadata.annotations.eks\.amazonaws\.com/role-arn}' \
+  2>/dev/null || echo "MISSING")
+
+if [[ "$SA_ROLE" == "MISSING" || -z "$SA_ROLE" ]]; then
+  echo "  ❌ Service account karpenter missing IRSA annotation"
+  PREREQ_FAILED=1
+else
+  echo "  ✅ IRSA annotation: $SA_ROLE"
+fi
+
+if [[ "$PREREQ_FAILED" == "1" ]]; then
+  echo ""
+  echo "  ❌ Prerequisites missing — ensure stage2-apply completed then re-run"
+  exit 1
+fi
+
+echo "  ✅ All prerequisites verified"
+
+# ════════════════════════════════════════
+# PATCH SQS PERMISSIONS
+# Safety net: Terraform manages this via
+# karpenter_sqs_queue_arn in module.karpenter_irsa
+# This inline policy ensures SQS access is present
+# even if the managed policy lags on first run
+# ════════════════════════════════════════
+echo ""
+echo "==> Verifying Karpenter controller role has SQS permissions"
+
+SQS_QUEUE_ARN=$(aws sqs get-queue-attributes \
+  --queue-url "$SQS_URL" \
+  --attribute-names QueueArn \
+  --query 'Attributes.QueueArn' \
+  --output text)
+
+echo "  Queue ARN: $SQS_QUEUE_ARN"
+
+# Check if managed policy already includes SQS
+HAS_SQS=$(aws iam get-role \
+  --role-name "${CLUSTER_NAME}-karpenter-controller" \
+  --query 'Role.RoleName' \
+  --output text 2>/dev/null \
+  | xargs -I{} aws iam list-attached-role-policies --role-name {} \
+  --query 'AttachedPolicies[].PolicyArn' --output text \
+  | xargs -I{} aws iam get-policy-version \
+  --policy-arn {} --version-id v1 \
+  --query 'PolicyVersion.Document.Statement[].Action[]' \
+  --output text 2>/dev/null | grep -c "sqs" || echo "0")
+
+if [[ "$HAS_SQS" == "0" ]]; then
+  echo "  ⚠️  Managed policy missing SQS — attaching inline policy as safety net"
+  aws iam put-role-policy \
+    --role-name "${CLUSTER_NAME}-karpenter-controller" \
+    --policy-name "KarpenterSQSInterruption" \
+    --policy-document "{
+      \"Version\": \"2012-10-17\",
+      \"Statement\": [{
+        \"Sid\": \"KarpenterSQSInterruption\",
+        \"Effect\": \"Allow\",
+        \"Action\": [
+          \"sqs:GetQueueUrl\",
+          \"sqs:GetQueueAttributes\",
+          \"sqs:ReceiveMessage\",
+          \"sqs:DeleteMessage\"
+        ],
+        \"Resource\": \"${SQS_QUEUE_ARN}\"
+      }]
+    }"
+  echo "  ✅ Inline SQS policy attached"
+else
+  echo "  ✅ Managed policy already includes SQS permissions"
+fi
+
+# ════════════════════════════════════════
 # KARPENTER
 # ════════════════════════════════════════
 echo ""
@@ -77,8 +189,6 @@ CLUSTER_ENDPOINT=$(aws eks describe-cluster \
 
 echo "  Cluster endpoint: $CLUSTER_ENDPOINT"
 
-# ✅ FIX: no nodeSelector — label not confirmed on nodes
-# ✅ FIX: no --wait — poll readiness separately for better debug output
 install_or_upgrade karpenter kube-system \
   "oci://public.ecr.aws/karpenter/karpenter" \
   --version "${KARPENTER_VERSION}" \
