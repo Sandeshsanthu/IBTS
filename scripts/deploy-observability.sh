@@ -249,7 +249,6 @@ spec:
         encrypted: true
         deleteOnTermination: true
 EOF
-
 echo "==> Applying NodePool"
 kubectl apply -f - <<EOF
 apiVersion: karpenter.sh/v1
