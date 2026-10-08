@@ -128,12 +128,7 @@ module "karpenter_irsa" {
   attach_karpenter_controller_policy      = true
   karpenter_controller_cluster_id         = var.cluster_name
   karpenter_controller_node_iam_role_arns = [aws_iam_role.karpenter_node.arn]
-
-  # ✅ ADDED: was missing — without this the module omits all SQS statements
-  # from the generated managed policy, causing Karpenter to panic on startup:
-  # "NonExistentQueue: does not exist or you do not have access to it"
-  # even though the queue exists — the role simply has no sqs:* permissions
-  karpenter_sqs_queue_arn = aws_sqs_queue.karpenter_interruption.arn
+  karpenter_sqs_queue_arn                 = aws_sqs_queue.karpenter_interruption.arn
 
   oidc_providers = {
     main = {
@@ -145,8 +140,36 @@ module "karpenter_irsa" {
   depends_on = [aws_sqs_queue.karpenter_interruption]
 }
 
+# ── ADDED: Karpenter v1 manages instance profiles itself at runtime
+# The base module policy does not include iam:GetInstanceProfile /
+# iam:CreateInstanceProfile / iam:AddRoleToInstanceProfile
+# Without these the EC2NodeClass stays InstanceProfileReady=Unknown
+# and NodePool stays Ready=False → no nodes can ever be provisioned
+resource "aws_iam_role_policy" "karpenter_controller_instance_profile" {
+  name = "${var.cluster_name}-karpenter-instance-profile"
+  role = module.karpenter_irsa.iam_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "KarpenterInstanceProfile"
+        Effect = "Allow"
+        Action = [
+          "iam:CreateInstanceProfile",
+          "iam:DeleteInstanceProfile",
+          "iam:GetInstanceProfile",
+          "iam:AddRoleToInstanceProfile",
+          "iam:RemoveRoleFromInstanceProfile",
+          "iam:TagInstanceProfile"
+        ]
+        Resource = "arn:aws:iam::*:instance-profile/*"
+      }
+    ]
+  })
+}
+
 # ── Karpenter controller service account
-# Created here so IRSA annotation is set before Helm install
 resource "kubernetes_service_account" "karpenter" {
   metadata {
     name      = "karpenter"
