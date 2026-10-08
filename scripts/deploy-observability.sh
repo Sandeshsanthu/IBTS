@@ -63,7 +63,6 @@ install_or_upgrade() {
 
 # ════════════════════════════════════════
 # PREREQUISITE CHECKS
-# Fail fast before any Helm install
 # ════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════"
@@ -121,10 +120,6 @@ echo "  ✅ All prerequisites verified"
 
 # ════════════════════════════════════════
 # PATCH SQS PERMISSIONS
-# Safety net: Terraform manages this via
-# karpenter_sqs_queue_arn in module.karpenter_irsa
-# This inline policy ensures SQS access is present
-# even if the managed policy lags on first run
 # ════════════════════════════════════════
 echo ""
 echo "==> Verifying Karpenter controller role has SQS permissions"
@@ -235,9 +230,6 @@ kind: EC2NodeClass
 metadata:
   name: default
 spec:
-  # ✅ FIXED: amiFamily removed in karpenter.k8s.aws/v1
-  # was: amiFamily: AL2
-  # v1 API requires amiSelectorTerms with alias instead
   amiSelectorTerms:
     - alias: al2@latest
   role: "${CLUSTER_NAME}-karpenter-node"
@@ -264,9 +256,13 @@ metadata:
   name: default
 spec:
   template:
+    metadata:
+      annotations:
+        # ✅ FIXED: expireAfter moved from spec.disruption to here in v1
+        karpenter.sh/expire-after: 720h
     spec:
       nodeClassRef:
-        apiVersion: karpenter.k8s.aws/v1
+        # ✅ FIXED: apiVersion removed from nodeClassRef in v1
         group: karpenter.k8s.aws
         kind: EC2NodeClass
         name: default
@@ -288,7 +284,6 @@ spec:
     memory: 16Gi
   disruption:
     consolidationPolicy: WhenUnderutilized
-    expireAfter: 720h
 EOF
 
 echo "  EC2NodeClass + NodePool applied"
@@ -368,9 +363,7 @@ install_or_upgrade fluent-bit "$OBS_NAMESPACE" \
   --timeout 5m \
   --wait
 
-# ════════════════════════════════════════
-# SUMMARY
-# ════════════════════════════════════════
+
 echo ""
 echo "══════════════════════════════════════"
 echo " DEPLOYMENT COMPLETE"
