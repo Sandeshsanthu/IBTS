@@ -263,7 +263,7 @@ aws iam put-role-policy \
       }
     ]
   }"
-echo "  [OK] EC2 launch permissions patched (RunInstances fix)"
+echo "  [OK] EC2 launch permissions patched"
 
 # Patch 3 -- Launch template management
 aws iam put-role-policy \
@@ -670,10 +670,14 @@ echo "=========================================="
 refresh_kubeconfig
 echo "==> Deploying kube-prometheus-stack"
 # -------------------------------------------------------
-# FIX: prometheusOperator.tls.enabled=false
-# Without this the operator pod mounts a tls-secret volume
-# that never gets created when webhooks are disabled
-# causing ContainerCreating to hang forever
+# FIX 1: prometheusOperator.tls.enabled=false
+#         removes tls-secret volume mount from operator
+#         pod -- without this it hangs in ContainerCreating
+#
+# FIX 2: prometheus storageSpec resources.requests.storage
+#         storage size is REQUIRED by Kubernetes
+#         without it PVC creation fails with:
+#         spec.resources[storage]: Required value
 # -------------------------------------------------------
 helm install kube-prometheus-stack \
   prometheus-community/kube-prometheus-stack \
@@ -688,6 +692,7 @@ helm install kube-prometheus-stack \
   --set grafana.persistence.enabled=true \
   --set grafana.persistence.storageClassName=gp3 \
   --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=gp3 \
+  --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=20Gi \
   --set prometheus.prometheusSpec.retention=30d
 
 echo "==> State 15s after helm install:"
@@ -704,6 +709,7 @@ helm install elasticsearch elastic/elasticsearch \
   --set replicas=1 --set minimumMasterNodes=1 \
   --set esJavaOpts="-Xmx512m -Xms512m" \
   --set volumeClaimTemplate.storageClassName=gp3 \
+  --set volumeClaimTemplate.resources.requests.storage=10Gi \
   --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
 wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
 
