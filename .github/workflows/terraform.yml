@@ -40,20 +40,20 @@ jobs:
 
       - name: Init
         run: terraform init
-        working-directory: infra-aws/stage1-config
+        working-directory: infra-aws/inital/stage1-cluster
 
       - name: Validate
         run: terraform validate
-        working-directory: infra-aws/stage1-config
+        working-directory: infra-aws/inital/stage1-cluster
 
       - name: Plan
         run: terraform plan -refresh=true -out=tfplan-stage1
-        working-directory: infra-aws/stage1-config
+        working-directory: infra-aws/inital/stage1-cluster
 
       - uses: actions/upload-artifact@v4
         with:
           name: tfplan-stage1
-          path: infra-aws/stage1-config/tfplan-stage1
+          path: infra-aws/inital/stage1-cluster/tfplan-stage1
           retention-days: 1
 
   # =========================================
@@ -81,16 +81,16 @@ jobs:
 
       - name: Init
         run: terraform init
-        working-directory: infra-aws/stage1-config
+        working-directory: infra-aws/inital/stage1-cluster
 
       - uses: actions/download-artifact@v4
         with:
           name: tfplan-stage1
-          path: infra-aws/stage1-config
+          path: infra-aws/inital/stage1-cluster
 
       - name: Apply
         run: terraform apply -input=false tfplan-stage1
-        working-directory: infra-aws/stage1-config
+        working-directory: infra-aws/inital/stage1-cluster
 
   # =========================================
   # STAGE 2 PLAN
