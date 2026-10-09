@@ -61,10 +61,6 @@ debug_namespace() {
   echo ""
 }
 
-# ---------------------------------------------------------
-# FIX: awk backreference \1 not supported in standard awk
-# Use split() to compare ready vs total containers instead
-# ---------------------------------------------------------
 wait_for_pods() {
   local namespace=$1
   local description=$2
@@ -335,13 +331,39 @@ helm install karpenter \
   --set "controller.resources.limits.cpu=500m" \
   --set "controller.resources.limits.memory=512Mi"
 
+# ---------------------------------------------------------
+# FIX: kubectl wait exits 1 when pods are replaced mid-wait
+# Use a polling loop instead -- tolerates pod churn
+# ---------------------------------------------------------
 refresh_kubeconfig
-kubectl wait pod -n kube-system \
-  -l app.kubernetes.io/name=karpenter \
-  --for=condition=Ready --timeout=300s \
-  && echo "  [OK] Karpenter Ready" \
-  || { kubectl describe pod -n kube-system \
-         -l app.kubernetes.io/name=karpenter; exit 1; }
+echo "  Waiting for Karpenter pods to be Ready"
+KARP_READY=false
+for i in $(seq 1 30); do
+  KARP_TOTAL=$(kubectl get pods -n kube-system \
+    -l app.kubernetes.io/name=karpenter \
+    --no-headers 2>/dev/null | wc -l | tr -d ' ')
+  KARP_READY_COUNT=$(kubectl get pods -n kube-system \
+    -l app.kubernetes.io/name=karpenter \
+    --no-headers 2>/dev/null \
+    | awk '$3=="Running" {
+        split($2,a,"/")
+        if (a[1]==a[2] && a[1]+0>0) count++
+      }
+      END { print count+0 }')
+  echo "  [$(( i * 10 ))s] karpenter total=${KARP_TOTAL} ready=${KARP_READY_COUNT}"
+  if [[ "$KARP_TOTAL" -gt "0" && "$KARP_READY_COUNT" -eq "$KARP_TOTAL" ]]; then
+    KARP_READY=true
+    break
+  fi
+  sleep 10
+done
+if [[ "$KARP_READY" == "false" ]]; then
+  echo "  [FAIL] Karpenter pods did not become Ready"
+  kubectl describe pod -n kube-system \
+    -l app.kubernetes.io/name=karpenter
+  exit 1
+fi
+echo "  [OK] Karpenter Ready"
 
 echo "  Waiting 90s for webhook registration"
 sleep 90
