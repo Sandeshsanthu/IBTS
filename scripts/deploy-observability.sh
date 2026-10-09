@@ -61,6 +61,10 @@ debug_namespace() {
   echo ""
 }
 
+# ---------------------------------------------------------
+# FIX: awk backreference \1 not supported in standard awk
+# Use split() to compare ready vs total containers instead
+# ---------------------------------------------------------
 wait_for_pods() {
   local namespace=$1
   local description=$2
@@ -76,15 +80,22 @@ wait_for_pods() {
     fi
 
     local total ready pending failed
+
     total=$(kubectl get pods -n "$namespace" \
       --no-headers 2>/dev/null | wc -l | tr -d ' ')
+
     ready=$(kubectl get pods -n "$namespace" \
       --no-headers 2>/dev/null \
-      | awk '$2~/^([0-9]+)\/\1$/ && $3=="Running"' \
-      | wc -l | tr -d ' ')
+      | awk '$3=="Running" {
+          split($2,a,"/")
+          if (a[1]==a[2] && a[1]+0>0) count++
+        }
+        END { print count+0 }')
+
     pending=$(kubectl get pods -n "$namespace" \
       --no-headers 2>/dev/null \
       | awk '$3=="Pending"' | wc -l | tr -d ' ')
+
     failed=$(kubectl get pods -n "$namespace" \
       --no-headers 2>/dev/null \
       | awk '$3~/Error|CrashLoop|OOMKilled/' \
@@ -207,19 +218,13 @@ aws iam put-role-policy \
       {
         \"Sid\": \"RunInstances\",
         \"Effect\": \"Allow\",
-        \"Action\": [
-          \"ec2:RunInstances\",
-          \"ec2:CreateFleet\"
-        ],
+        \"Action\": [\"ec2:RunInstances\", \"ec2:CreateFleet\"],
         \"Resource\": \"*\"
       },
       {
         \"Sid\": \"TagInstances\",
         \"Effect\": \"Allow\",
-        \"Action\": [
-          \"ec2:CreateTags\",
-          \"ec2:TerminateInstances\"
-        ],
+        \"Action\": [\"ec2:CreateTags\", \"ec2:TerminateInstances\"],
         \"Resource\": \"*\",
         \"Condition\": {
           \"StringEquals\": {
@@ -669,16 +674,6 @@ echo "=========================================="
 
 refresh_kubeconfig
 echo "==> Deploying kube-prometheus-stack"
-# -------------------------------------------------------
-# FIX 1: prometheusOperator.tls.enabled=false
-#         removes tls-secret volume mount from operator
-#         pod -- without this it hangs in ContainerCreating
-#
-# FIX 2: prometheus storageSpec resources.requests.storage
-#         storage size is REQUIRED by Kubernetes
-#         without it PVC creation fails with:
-#         spec.resources[storage]: Required value
-# -------------------------------------------------------
 helm install kube-prometheus-stack \
   prometheus-community/kube-prometheus-stack \
   -n "$OBS_NAMESPACE" \
@@ -706,11 +701,18 @@ refresh_kubeconfig
 echo "==> Deploying elasticsearch"
 helm install elasticsearch elastic/elasticsearch \
   -n "$OBS_NAMESPACE" --version 8.5.1 --timeout 15m \
-  --set replicas=1 --set minimumMasterNodes=1 \
+  --set replicas=1 \
+  --set minimumMasterNodes=1 \
   --set esJavaOpts="-Xmx512m -Xms512m" \
   --set volumeClaimTemplate.storageClassName=gp3 \
   --set volumeClaimTemplate.resources.requests.storage=10Gi \
   --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
+
+echo "==> State 15s after helm install:"
+sleep 15
+kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
+kubectl get events -n "$OBS_NAMESPACE" \
+  --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
 wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
 
 refresh_kubeconfig
@@ -718,6 +720,12 @@ echo "==> Deploying kibana"
 helm install kibana elastic/kibana \
   -n "$OBS_NAMESPACE" --version 8.5.1 --timeout 10m \
   --set "elasticsearchHosts=http://elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local:9200"
+
+echo "==> State 15s after helm install:"
+sleep 15
+kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
+kubectl get events -n "$OBS_NAMESPACE" \
+  --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
 wait_for_pods "$OBS_NAMESPACE" "kibana" 600
 
 refresh_kubeconfig
@@ -727,6 +735,12 @@ helm install otel-collector \
   -n "$OBS_NAMESPACE" --version 0.91.0 --timeout 5m \
   --set mode=deployment \
   --set image.repository=otel/opentelemetry-collector-contrib
+
+echo "==> State 15s after helm install:"
+sleep 15
+kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
+kubectl get events -n "$OBS_NAMESPACE" \
+  --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
 wait_for_pods "$OBS_NAMESPACE" "otel-collector" 300
 
 refresh_kubeconfig
@@ -739,12 +753,24 @@ helm install jaeger jaegertracing/jaeger \
   --set "storage.elasticsearch.host=elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local" \
   --set storage.elasticsearch.port=9200 \
   --set agent.enabled=false
+
+echo "==> State 15s after helm install:"
+sleep 15
+kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
+kubectl get events -n "$OBS_NAMESPACE" \
+  --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
 wait_for_pods "$OBS_NAMESPACE" "jaeger" 300
 
 refresh_kubeconfig
 echo "==> Deploying fluent-bit"
 helm install fluent-bit fluent/fluent-bit \
   -n "$OBS_NAMESPACE" --version 0.46.7 --timeout 5m
+
+echo "==> State 15s after helm install:"
+sleep 15
+kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
+kubectl get events -n "$OBS_NAMESPACE" \
+  --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
 wait_for_pods "$OBS_NAMESPACE" "fluent-bit" 300
 
 # =========================================
