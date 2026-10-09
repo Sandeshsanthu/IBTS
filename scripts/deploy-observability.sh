@@ -364,6 +364,13 @@ kubectl wait pod -n kube-system \
 echo "  Waiting 90s for webhook registration"
 sleep 90
 
+# =========================================
+# EC2NodeClass and NodePool
+# Values written to temp file via printf
+# so shell variables expand correctly
+# AND Karpenter webhook gets valid spec
+# on the first apply -- no patch needed
+# =========================================
 refresh_kubeconfig
 
 EC2NC_FILE=$(mktemp /tmp/ec2nodeclass-XXXXXX.yaml)
