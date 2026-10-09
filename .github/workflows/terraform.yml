@@ -1,5 +1,5 @@
 # filename: .github/workflows/terraform.yml
-name: Terraform Infrastructure
+name: "IBTS Infrastructure"
 
 on:
   push:
@@ -12,199 +12,230 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: ap-south-2
-  CLUSTER_NAME: ibts-eks
-  TF_VERSION: 1.7.5
+  AWS_REGION: "ap-south-2"
+  CLUSTER_NAME: "ibts-eks"
 
 jobs:
   # =========================================
-  # STAGE 1 - VPC, EKS cluster, base network
+  # STAGE 1 PLAN
   # =========================================
   stage1-plan:
-    name: Stage1 Plan
+    name: "Stage 1 Plan (Cluster)"
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: infra-aws/inital/stage1-cluster
+    environment: production
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "Stage1Plan"
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ env.TF_VERSION }}
+          terraform_version: "1.10.5"
+          terraform_wrapper: false
 
-      - name: Terraform Init
+      - name: Init
         run: terraform init
+        working-directory: infra-aws/stage1-config
 
-      - name: Terraform Validate
+      - name: Validate
         run: terraform validate
+        working-directory: infra-aws/stage1-config
 
-      - name: Terraform Plan
+      - name: Plan
         run: terraform plan -refresh=true -out=tfplan-stage1
+        working-directory: infra-aws/stage1-config
 
-      - name: Upload stage1 plan
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: tfplan-stage1
-          path: infra-aws/inital/stage1-cluster/tfplan-stage1
+          path: infra-aws/stage1-config/tfplan-stage1
           retention-days: 1
 
+  # =========================================
+  # STAGE 1 APPLY
+  # =========================================
   stage1-apply:
-    name: Stage1 Apply
-    runs-on: ubuntu-latest
+    name: "Stage 1 Apply (Cluster)"
     needs: stage1-plan
-    defaults:
-      run:
-        working-directory: infra-aws/inital/stage1-cluster
+    runs-on: ubuntu-latest
+    environment: production
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "Stage1Apply"
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ env.TF_VERSION }}
+          terraform_version: "1.10.5"
+          terraform_wrapper: false
 
-      - name: Terraform Init
+      - name: Init
         run: terraform init
+        working-directory: infra-aws/stage1-config
 
-      - name: Download stage1 plan
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: tfplan-stage1
-          path: infra-aws/inital/stage1-cluster
+          path: infra-aws/stage1-config
 
-      - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan-stage1
+      - name: Apply
+        run: terraform apply -input=false tfplan-stage1
+        working-directory: infra-aws/stage1-config
 
   # =========================================
-  # STAGE 2 - EKS addons, Karpenter, namespaces
+  # STAGE 2 PLAN
   # =========================================
   stage2-plan:
-    name: Stage2 Plan
-    runs-on: ubuntu-latest
+    name: "Stage 2 Plan (Addons)"
     needs: stage1-apply
-    defaults:
-      run:
-        working-directory: infra-aws/inital/stage2-config
+    runs-on: ubuntu-latest
+    environment: production
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "Stage2Plan"
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ env.TF_VERSION }}
+          terraform_version: "1.10.5"
+          terraform_wrapper: false
 
-      - name: Update kubeconfig
-        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
-
-      - name: Terraform Init
+      - name: Init
         run: terraform init
+        working-directory: infra-aws/inital/stage2-config
 
-      - name: Terraform Validate
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name $(aws eks list-clusters \
+                       --region ${{ env.AWS_REGION }} \
+                       --query 'clusters[0]' \
+                       --output text)
+
+      - name: Validate
         run: terraform validate
+        working-directory: infra-aws/inital/stage2-config
 
-      - name: Terraform Plan
+      - name: Plan
         run: terraform plan -refresh=true -out=tfplan-stage2
+        working-directory: infra-aws/inital/stage2-config
+        env:
+          TF_VAR_grafana_admin_password: ${{ secrets.TF_VAR_GRAFANA_ADMIN_PASSWORD }}
 
-      - name: Upload stage2 plan
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: tfplan-stage2
           path: infra-aws/inital/stage2-config/tfplan-stage2
           retention-days: 1
 
+  # =========================================
+  # STAGE 2 APPLY
+  # =========================================
   stage2-apply:
-    name: Stage2 Apply
-    runs-on: ubuntu-latest
+    name: "Stage 2 Apply (Addons)"
     needs: stage2-plan
-    defaults:
-      run:
-        working-directory: infra-aws/inital/stage2-config
+    runs-on: ubuntu-latest
+    environment: production
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "Stage2Apply"
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ env.TF_VERSION }}
+          terraform_version: "1.10.5"
+          terraform_wrapper: false
 
-      - name: Update kubeconfig
-        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.CLUSTER_NAME }}
-
-      - name: Terraform Init
+      - name: Init
         run: terraform init
+        working-directory: infra-aws/inital/stage2-config
 
-      - name: Download stage2 plan
-        uses: actions/download-artifact@v4
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name $(aws eks list-clusters \
+                       --region ${{ env.AWS_REGION }} \
+                       --query 'clusters[0]' \
+                       --output text)
+
+      - name: Cleanup failed Karpenter release
+        run: |
+          STATUS=$(helm status karpenter -n kube-system --output json 2>/dev/null \
+                     | python3 -c "import sys,json; \
+                         print(json.load(sys.stdin)['info']['status'])" \
+                     2>/dev/null || echo "not-found")
+
+          if [[ "$STATUS" == "failed" || \
+                "$STATUS" == "pending-install" || \
+                "$STATUS" == "pending-upgrade" ]]; then
+            echo "Uninstalling karpenter (status: $STATUS)"
+            helm uninstall karpenter -n kube-system --ignore-not-found
+          else
+            echo "Karpenter status: $STATUS -- skipping"
+          fi
+
+      - uses: actions/download-artifact@v4
         with:
           name: tfplan-stage2
           path: infra-aws/inital/stage2-config
 
-      - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan-stage2
+      - name: Apply
+        env:
+          TF_VAR_grafana_admin_password: ${{ secrets.TF_VAR_GRAFANA_ADMIN_PASSWORD }}
+        run: terraform apply -input=false tfplan-stage2
+        working-directory: infra-aws/inital/stage2-config
 
   # =========================================
-  # OBSERVABILITY - Karpenter + stack deploy
+  # OBSERVABILITY DEPLOY
   # =========================================
   deploy-observability:
-    name: Deploy Observability
-    runs-on: ubuntu-latest
+    name: "Deploy Observability Stack"
     needs: stage2-apply
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_REGION: "ap-south-2"
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
-
-      - name: Install tools
-        run: |
-          # kubectl
-          curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-
-          # helm
-          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-          # python3 already available on ubuntu-latest
+          role-session-name: "DeployObservability"
 
       - name: Deploy observability stack
         env:
-          TF_VAR_grafana_admin_password: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          KARPENTER_VERSION: "1.0.8"
+          TF_VAR_grafana_admin_password: ${{ secrets.TF_VAR_GRAFANA_ADMIN_PASSWORD }}
         run: |
           chmod +x scripts/deploy-observability.sh
-          ./scripts/deploy-observability.sh ${{ env.CLUSTER_NAME }} ${{ env.AWS_REGION }}
+          ./scripts/deploy-observability.sh \
+            $(aws eks list-clusters \
+                --region ${{ env.AWS_REGION }} \
+                --query 'clusters[0]' \
+                --output text) \
+            ${{ env.AWS_REGION }}
