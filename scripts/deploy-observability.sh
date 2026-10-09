@@ -726,6 +726,8 @@ helm install elasticsearch elastic/elasticsearch \
   --set replicas=1 \
   --set minimumMasterNodes=1 \
   --set esJavaOpts="-Xmx512m -Xms512m" \
+  --set sysctlInitContainer.enabled=true \
+   --set sysctlVmMaxMapCount=262144 \
   --set volumeClaimTemplate.storageClassName=gp3 \
   --set volumeClaimTemplate.resources.requests.storage=10Gi \
   --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
