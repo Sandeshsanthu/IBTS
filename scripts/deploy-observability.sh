@@ -165,26 +165,146 @@ echo "  [OK] All prerequisites verified"
 
 # =========================================
 # IAM PATCHES
+# Fixes three missing permissions on the
+# Karpenter controller role:
+#
+# 1. KarpenterSQSInterruption
+#    sqs:ReceiveMessage etc on the queue
+#
+# 2. KarpenterV1EC2Launch
+#    ec2:RunInstances + ec2:CreateFleet
+#    IRSA module generated v0.x policy with
+#    condition on karpenter.sh/provisioner-name
+#    Karpenter v1 uses karpenter.sh/nodepool
+#    Old condition never matches -> RunInstances
+#    denied -> EC2 never launches
+#    This policy has NO tag condition -> always
+#    allows launch for this cluster's resources
+#
+# 3. KarpenterV1LaunchTemplate
+#    ec2:CreateLaunchTemplate
+#    ec2:DeleteLaunchTemplate
+#    ec2:DescribeLaunchTemplates
+#    Required for Karpenter v1 to manage its
+#    own launch templates at runtime
 # =========================================
 echo ""
 echo "=========================================="
 echo " IAM PATCHES"
 echo "=========================================="
 
+ACCOUNT_ID=$(aws sts get-caller-identity \
+  --query 'Account' --output text)
+
 SQS_QUEUE_ARN=$(aws sqs get-queue-attributes \
   --queue-url "$SQS_URL" --attribute-names QueueArn \
   --query 'Attributes.QueueArn' --output text)
 
+# Patch 1 -- SQS interruption queue access
 aws iam put-role-policy \
   --role-name "${CLUSTER_NAME}-karpenter-controller" \
   --policy-name "KarpenterSQSInterruption" \
   --policy-document "{
-    \"Version\":\"2012-10-17\",
-    \"Statement\":[{\"Effect\":\"Allow\",
-    \"Action\":[\"sqs:GetQueueUrl\",\"sqs:GetQueueAttributes\",
-               \"sqs:ReceiveMessage\",\"sqs:DeleteMessage\"],
-    \"Resource\":\"${SQS_QUEUE_ARN}\"}]}"
+    \"Version\": \"2012-10-17\",
+    \"Statement\": [{
+      \"Effect\": \"Allow\",
+      \"Action\": [
+        \"sqs:GetQueueUrl\",
+        \"sqs:GetQueueAttributes\",
+        \"sqs:ReceiveMessage\",
+        \"sqs:DeleteMessage\"
+      ],
+      \"Resource\": \"${SQS_QUEUE_ARN}\"
+    }]
+  }"
 echo "  [OK] SQS permissions patched"
+
+# Patch 2 -- EC2 launch permissions for Karpenter v1
+# No tag condition -- fixes RunInstances denied error
+aws iam put-role-policy \
+  --role-name "${CLUSTER_NAME}-karpenter-controller" \
+  --policy-name "KarpenterV1EC2Launch" \
+  --policy-document "{
+    \"Version\": \"2012-10-17\",
+    \"Statement\": [
+      {
+        \"Sid\": \"RunInstances\",
+        \"Effect\": \"Allow\",
+        \"Action\": [
+          \"ec2:RunInstances\",
+          \"ec2:CreateFleet\"
+        ],
+        \"Resource\": \"*\"
+      },
+      {
+        \"Sid\": \"TagInstances\",
+        \"Effect\": \"Allow\",
+        \"Action\": [
+          \"ec2:CreateTags\",
+          \"ec2:TerminateInstances\"
+        ],
+        \"Resource\": \"*\",
+        \"Condition\": {
+          \"StringEquals\": {
+            \"aws:ResourceTag/kubernetes.io/cluster/${CLUSTER_NAME}\": \"owned\"
+          }
+        }
+      },
+      {
+        \"Sid\": \"PassRole\",
+        \"Effect\": \"Allow\",
+        \"Action\": \"iam:PassRole\",
+        \"Resource\": \"arn:aws:iam::${ACCOUNT_ID}:role/${CLUSTER_NAME}-karpenter-node\"
+      },
+      {
+        \"Sid\": \"DescribeEC2\",
+        \"Effect\": \"Allow\",
+        \"Action\": [
+          \"ec2:DescribeInstances\",
+          \"ec2:DescribeInstanceTypes\",
+          \"ec2:DescribeInstanceTypeOfferings\",
+          \"ec2:DescribeAvailabilityZones\",
+          \"ec2:DescribeImages\",
+          \"ec2:DescribeSpotPriceHistory\",
+          \"ec2:DescribeSecurityGroups\",
+          \"ec2:DescribeSubnets\",
+          \"ec2:DescribeVpcs\"
+        ],
+        \"Resource\": \"*\"
+      },
+      {
+        \"Sid\": \"SSMGetParameter\",
+        \"Effect\": \"Allow\",
+        \"Action\": \"ssm:GetParameter\",
+        \"Resource\": \"arn:aws:ssm:*:*:parameter/aws/service/eks/optimized-ami/*\"
+      },
+      {
+        \"Sid\": \"Pricing\",
+        \"Effect\": \"Allow\",
+        \"Action\": \"pricing:GetProducts\",
+        \"Resource\": \"*\"
+      }
+    ]
+  }"
+echo "  [OK] EC2 launch permissions patched (RunInstances fix)"
+
+# Patch 3 -- Launch template management
+aws iam put-role-policy \
+  --role-name "${CLUSTER_NAME}-karpenter-controller" \
+  --policy-name "KarpenterV1LaunchTemplate" \
+  --policy-document "{
+    \"Version\": \"2012-10-17\",
+    \"Statement\": [{
+      \"Effect\": \"Allow\",
+      \"Action\": [
+        \"ec2:CreateLaunchTemplate\",
+        \"ec2:DeleteLaunchTemplate\",
+        \"ec2:DescribeLaunchTemplates\"
+      ],
+      \"Resource\": \"*\"
+    }]
+  }"
+echo "  [OK] Launch template permissions patched"
 
 # =========================================
 # KARPENTER
@@ -244,13 +364,6 @@ kubectl wait pod -n kube-system \
 echo "  Waiting 90s for webhook registration"
 sleep 90
 
-# =========================================
-# EC2NodeClass and NodePool
-# Values written to temp file via printf
-# so shell variables expand correctly
-# AND Karpenter webhook gets valid spec
-# on the first apply -- no patch needed
-# =========================================
 refresh_kubeconfig
 
 EC2NC_FILE=$(mktemp /tmp/ec2nodeclass-XXXXXX.yaml)
