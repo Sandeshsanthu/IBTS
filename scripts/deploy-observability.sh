@@ -301,10 +301,9 @@ echo "==> Cleaning up before install"
 kubectl delete ec2nodeclass default --ignore-not-found --wait=false 2>/dev/null || true
 kubectl delete nodepool   default --ignore-not-found --wait=false 2>/dev/null || true
 echo "  Waiting for EC2NodeClass and NodePool to fully terminate"
-for i in $(seq 1 36); do
-    NC_EXISTS=$( { kubectl get ec2nodeclass default --no-headers 2>/dev/null || true; } | wc -l | tr -d ' ')
-    NP_EXISTS=$( { kubectl get nodepool default --no-headers 2>/dev/null || true; } | wc -l | tr -d ' ')
-
+for i in $(seq 1 6); do
+  NC_EXISTS=$( { kubectl get ec2nodeclass default --no-headers 2>/dev/null || true; } | wc -l | tr -d ' ')
+  NP_EXISTS=$( { kubectl get nodepool default --no-headers 2>/dev/null || true; } | wc -l | tr -d ' ')
   echo "  [$(( i * 5 ))s] ec2nodeclass=${NC_EXISTS} nodepool=${NP_EXISTS}"
   if [[ "$NC_EXISTS" -eq "0" && "$NP_EXISTS" -eq "0" ]]; then
     echo "  [OK] Objects fully terminated"
@@ -312,6 +311,21 @@ for i in $(seq 1 36); do
   fi
   sleep 5
 done
+echo "  Force-removing finalizers if objects still stuck"
+kubectl patch ec2nodeclass default \
+  --type=json \
+  -p='[{"op":"remove","path":"/metadata/finalizers"}]' \
+  2>/dev/null || true
+kubectl patch nodepool default \
+  --type=json \
+  -p='[{"op":"remove","path":"/metadata/finalizers"}]' \
+  2>/dev/null || true
+echo "  Waiting 10s after finalizer removal"
+sleep 10
+NC_EXISTS=$( { kubectl get ec2nodeclass default --no-headers 2>/dev/null || true; } | wc -l | tr -d ' ')
+NP_EXISTS=$( { kubectl get nodepool default --no-headers 2>/dev/null || true; } | wc -l | tr -d ' ')
+echo "  Final state: ec2nodeclass=${NC_EXISTS} nodepool=${NP_EXISTS}"
+
 
 KSTATUS=$(helm status karpenter -n kube-system \
   --output json 2>/dev/null \
