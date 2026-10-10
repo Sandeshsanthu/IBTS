@@ -751,13 +751,14 @@ helm install elasticsearch elastic/elasticsearch \
   --set minimumMasterNodes=1 \
   --set esJavaOpts="-Xmx512m -Xms512m" \
   --set resources.requests.cpu=500m \
-  --set resources.requests.memory=1Gi \
+ --set resources.requests.memory=1Gi \
   --set resources.limits.cpu=1000m \
-  --set resources.limits.memory=1Gi \
+  --set resources.limits.memory=1536Mi \
   --set sysctlInitContainer.enabled=true \
-   --set sysctlVmMaxMapCount=262144 \
+  --set sysctlVmMaxMapCount=262144 \
   --set volumeClaimTemplate.storageClassName=gp3 \
   --set volumeClaimTemplate.resources.requests.storage=10Gi \
+  --set nodeSelector."node\.kubernetes\.io/instance-type"=t3.large \
   --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
 
 echo "==> State 15s after helm install:"
