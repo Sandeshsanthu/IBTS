@@ -19,9 +19,13 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  AWS_REGION: "ap-south-2"
+  CLUSTER_NAME: "ibts-eks"
+
 jobs:
   # ════════════════════════════════════════
-  # SAFETY CHECK — must type DESTROY to proceed
+  # SAFETY CHECK
   # ════════════════════════════════════════
   safety-check:
     name: "Safety Check"
@@ -39,42 +43,95 @@ jobs:
 
   # ════════════════════════════════════════
   # STAGE 2 DESTROY — k8s resources first
-  # Must destroy stage2 before stage1
-  # (cluster must exist while k8s resources are deleted)
   # ════════════════════════════════════════
   stage2-destroy:
     name: "Destroy Stage 2 (K8s Config)"
     needs: safety-check
     runs-on: ubuntu-latest
     environment: production
-    env:
-      AWS_REGION: "ap-south-1"
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Authenticate with AWS via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "TerraformStage2Destroy"
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.10.5"
           terraform_wrapper: false
 
-      - name: Terraform Init
+      - name: Install kubectl and helm
+        run: |
+          curl -fsSL \
+            "https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl" \
+            -o /usr/local/bin/kubectl
+          chmod +x /usr/local/bin/kubectl
+          curl -fsSL \
+            https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
+            | bash
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.CLUSTER_NAME }} 2>/dev/null || \
+            echo "EKS cluster not reachable -- continuing anyway"
+
+      - name: Force-clean namespace before destroy
+        run: |
+          echo "==> Uninstalling Helm releases"
+          for release in kube-prometheus-stack elasticsearch kibana \
+                         otel-collector jaeger fluent-bit; do
+            helm uninstall "$release" -n ibts-observability \
+              --wait=false --ignore-not-found 2>/dev/null || true
+          done
+
+          echo "==> Deleting PVCs"
+          kubectl delete pvc --all -n ibts-observability \
+            --force --grace-period=0 2>/dev/null || true
+
+          echo "==> Deleting pods"
+          kubectl delete pods --all -n ibts-observability \
+            --force --grace-period=0 2>/dev/null || true
+
+          echo "==> Stripping finalizers"
+          for resource in persistentvolumeclaims pods statefulsets \
+                          deployments replicasets daemonsets; do
+            kubectl get "$resource" -n ibts-observability \
+              -o name 2>/dev/null | while read obj; do
+              kubectl patch "$obj" -n ibts-observability \
+                --type=json \
+                -p='[{"op":"remove","path":"/metadata/finalizers"}]' \
+                2>/dev/null || true
+            done
+          done
+
+          echo "==> Stripping namespace finalizer"
+          kubectl patch namespace ibts-observability \
+            --type=json \
+            -p='[{"op":"remove","path":"/metadata/finalizers"}]' \
+            2>/dev/null || true
+
+          echo "==> Force-deleting namespace"
+          kubectl delete namespace ibts-observability \
+            --force --grace-period=0 2>/dev/null || true
+
+          echo "==> Waiting 15s for namespace to clear"
+          sleep 15
+
+      - name: Init
         run: terraform init
         working-directory: infra-aws/inital/stage2-config
 
-      - name: Terraform Destroy Stage 2
+      - name: Destroy
         run: terraform destroy -auto-approve
         working-directory: infra-aws/inital/stage2-config
-      - name: Confirm Stage 2 Destroyed
+
+      - name: Confirm
         run: |
           echo "══════════════════════════════════════"
           echo "STAGE 2 STATE AFTER DESTROY:"
@@ -86,42 +143,36 @@ jobs:
 
   # ════════════════════════════════════════
   # STAGE 1 DESTROY — cluster + VPC
-  # Runs only after stage2 is fully gone
   # ════════════════════════════════════════
   stage1-destroy:
     name: "Destroy Stage 1 (Cluster + VPC)"
     needs: stage2-destroy
     runs-on: ubuntu-latest
     environment: production
-    env:
-      AWS_REGION: "ap-south-1"
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Authenticate with AWS via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "TerraformStage1Destroy"
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.10.5"
           terraform_wrapper: false
 
-      - name: Terraform Init
+      - name: Init
         run: terraform init
         working-directory: infra-aws/inital/stage1-cluster
 
-      - name: Terraform Destroy Stage 1
+      - name: Destroy
         run: terraform destroy -auto-approve
         working-directory: infra-aws/inital/stage1-cluster
 
-      - name: Confirm Stage 1 Destroyed
+      - name: Confirm
         run: |
           echo "══════════════════════════════════════"
           echo "STAGE 1 STATE AFTER DESTROY:"

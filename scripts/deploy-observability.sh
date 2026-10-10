@@ -743,7 +743,7 @@ kubectl get events -n "$OBS_NAMESPACE" \
   --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
 wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
 
-refresh_kubeconfig
+# refresh_kubeconfig
 # echo "==> Deploying elasticsearch"
 # helm install elasticsearch elastic/elasticsearch \
 #   -n "$OBS_NAMESPACE" --version 8.5.1 --timeout 15m \
@@ -761,12 +761,12 @@ refresh_kubeconfig
 #   --set nodeSelector."node\.kubernetes\.io/instance-type"=t3.large \
 #   --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
 
-echo "==> State 15s after helm install:"
-sleep 15
-kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
-kubectl get events -n "$OBS_NAMESPACE" \
-  --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
-wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
+# echo "==> State 15s after helm install:"
+# sleep 15
+# kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
+# kubectl get events -n "$OBS_NAMESPACE" \
+#   --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
+# wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
 
 refresh_kubeconfig
 echo "==> Deploying kibana"
