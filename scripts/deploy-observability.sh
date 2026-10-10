@@ -744,22 +744,22 @@ kubectl get events -n "$OBS_NAMESPACE" \
 wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
 
 refresh_kubeconfig
-echo "==> Deploying elasticsearch"
-helm install elasticsearch elastic/elasticsearch \
-  -n "$OBS_NAMESPACE" --version 8.5.1 --timeout 15m \
-  --set replicas=1 \
-  --set minimumMasterNodes=1 \
-  --set esJavaOpts="-Xmx512m -Xms512m" \
-  --set resources.requests.cpu=500m \
- --set resources.requests.memory=1Gi \
-  --set resources.limits.cpu=1000m \
-  --set resources.limits.memory=1536Mi \
-  --set sysctlInitContainer.enabled=true \
-  --set sysctlVmMaxMapCount=262144 \
-  --set volumeClaimTemplate.storageClassName=gp3 \
-  --set volumeClaimTemplate.resources.requests.storage=10Gi \
-  --set nodeSelector."node\.kubernetes\.io/instance-type"=t3.large \
-  --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
+# echo "==> Deploying elasticsearch"
+# helm install elasticsearch elastic/elasticsearch \
+#   -n "$OBS_NAMESPACE" --version 8.5.1 --timeout 15m \
+#   --set replicas=1 \
+#   --set minimumMasterNodes=1 \
+#   --set esJavaOpts="-Xmx512m -Xms512m" \
+#   --set resources.requests.cpu=500m \
+#  --set resources.requests.memory=1Gi \
+#   --set resources.limits.cpu=1000m \
+#   --set resources.limits.memory=1536Mi \
+#   --set sysctlInitContainer.enabled=true \
+#   --set sysctlVmMaxMapCount=262144 \
+#   --set volumeClaimTemplate.storageClassName=gp3 \
+#   --set volumeClaimTemplate.resources.requests.storage=10Gi \
+#   --set nodeSelector."node\.kubernetes\.io/instance-type"=t3.large \
+#   --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
 
 echo "==> State 15s after helm install:"
 sleep 15
