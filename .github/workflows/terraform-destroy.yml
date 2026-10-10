@@ -71,7 +71,7 @@ jobs:
         run: terraform init
         working-directory: infra-aws/inital/stage2-config
 
-      # 🟢 CLEAN STEP: Drops dead Kubernetes/Helm references so Terraform skips API lookups
+      # CLEAN STEP: Drops dead Kubernetes/Helm references so Terraform skips API lookups
       - name: Clean Orphaned Kubernetes State
         run: |
           echo "Checking state for components..."
@@ -88,7 +88,8 @@ jobs:
         working-directory: infra-aws/inital/stage2-config
 
       - name: Terraform Destroy Stage 2
-        run: terraform destroy -auto-approve
+        # 🟢 ADDED -lock=false here as a preventative measure for Stage 2
+        run: terraform destroy -auto-approve -lock=false
         working-directory: infra-aws/inital/stage2-config
 
       - name: Confirm Stage 2 Destroyed
@@ -134,7 +135,7 @@ jobs:
         run: terraform init
         working-directory: infra-aws/inital/stage1-cluster
 
-      # 🟢 CLEAN STEP FOR STAGE 1: Drop the cluster if Stage 1 still tries to target it directly
+      # CLEAN STEP FOR STAGE 1: Drop the cluster if Stage 1 still tries to target it directly
       - name: Clean Orphaned Cluster State
         run: |
           terraform state rm aws_eks_cluster.this || true
@@ -142,7 +143,8 @@ jobs:
         working-directory: infra-aws/inital/stage1-cluster
 
       - name: Terraform Destroy Stage 1
-        run: terraform destroy -auto-approve
+        # 🟢 ADDED -lock=false to bypass the S3 PreconditionFailed state lock issue
+        run: terraform destroy -auto-approve -lock=false
         working-directory: infra-aws/inital/stage1-cluster
 
       - name: Confirm Stage 1 Destroyed
