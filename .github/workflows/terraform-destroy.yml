@@ -71,9 +71,26 @@ jobs:
         run: terraform init
         working-directory: infra-aws/inital/stage2-config
 
+      # 🟢 CLEAN STEP: Drops dead Kubernetes/Helm references so Terraform skips API lookups
+      - name: Clean Orphaned Kubernetes State
+        run: |
+          echo "Checking state for components..."
+          terraform state rm data.aws_eks_cluster.this || true
+          terraform state rm kubernetes_namespace.ibts_observability || true
+          
+          # Dynamic cleanup for any remaining kubernetes or helm provider resources
+          REMAINING_K8S=$(terraform state list 2>/dev/null | grep -E "kubernetes_|helm_" || true)
+          if [ ! -z "$REMAINING_K8S" ]; then
+            echo "Removing residual resources from state:"
+            echo "$REMAINING_K8S"
+            terraform state rm $REMAINING_K8S || true
+          fi
+        working-directory: infra-aws/inital/stage2-config
+
       - name: Terraform Destroy Stage 2
         run: terraform destroy -auto-approve
         working-directory: infra-aws/inital/stage2-config
+
       - name: Confirm Stage 2 Destroyed
         run: |
           echo "══════════════════════════════════════"
@@ -115,6 +132,13 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+        working-directory: infra-aws/inital/stage1-cluster
+
+      # 🟢 CLEAN STEP FOR STAGE 1: Drop the cluster if Stage 1 still tries to target it directly
+      - name: Clean Orphaned Cluster State
+        run: |
+          terraform state rm aws_eks_cluster.this || true
+          terraform state rm aws_eks_cluster.ibts-eks || true
         working-directory: infra-aws/inital/stage1-cluster
 
       - name: Terraform Destroy Stage 1
