@@ -766,30 +766,35 @@ kubectl get events -n "$OBS_NAMESPACE" \
   --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
 wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
 
-# refresh_kubeconfig
-# echo "==> Deploying elasticsearch"
-# helm install elasticsearch elastic/elasticsearch \
-#   -n "$OBS_NAMESPACE" --version 8.5.1 --timeout 15m \
-#   --set replicas=1 \
-#   --set minimumMasterNodes=1 \
-#   --set esJavaOpts="-Xmx512m -Xms512m" \
-#   --set resources.requests.cpu=500m \
-#  --set resources.requests.memory=1Gi \
-#   --set resources.limits.cpu=1000m \
-#   --set resources.limits.memory=1536Mi \
-#   --set sysctlInitContainer.enabled=true \
-#   --set sysctlVmMaxMapCount=262144 \
-#   --set volumeClaimTemplate.storageClassName=gp3 \
-#   --set volumeClaimTemplate.resources.requests.storage=10Gi \
-#   --set nodeSelector."node\.kubernetes\.io/instance-type"=t3.large \
-#   --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
+refresh_kubeconfig
+echo "==> Deploying elasticsearch"
 
-# echo "==> State 15s after helm install:"
-# sleep 15
-# kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
-# kubectl get events -n "$OBS_NAMESPACE" \
-#   --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
-# wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
+# Use actual multi-line strings or pass strings with valid escaped characters
+helm install elasticsearch elastic/elasticsearch \
+  -n "${OBS_NAMESPACE:-ibts-observability}" --version 8.5.1 --timeout 15m \
+  --set replicas=1 \
+  --set minimumMasterNodes=1 \
+  --set esJavaOpts="-Xmx512m -Xms512m" \
+  --set resources.requests.cpu=500m \
+  --set resources.requests.memory=1Gi \
+  --set resources.limits.cpu=1000m \
+  --set resources.limits.memory=1536Mi \
+  --set sysctlInitContainer.enabled=true \
+  --set sysctlVmMaxMapCount=262144 \
+  --set volumeClaimTemplate.storageClassName=gp3 \
+  --set volumeClaimTemplate.resources.requests.storage=10Gi \
+  --set nodeSelector."node\.kubernetes\.io/instance-type"=t3.large \
+  --set secret.enabled=false \
+  --set-string esConfig."elasticsearch\.yml"="xpack.security.enabled: false
+xpack.ml.enabled: false"
+
+echo "==> Waiting for volume creation and deployment state tracking..."
+sleep 60  # Increased sleep duration to allow AWS Storage Volume engine initialization
+
+kubectl get pods -n "${OBS_NAMESPACE:-ibts-observability}"
+kubectl get events -n "$OBS_NAMESPACE" \
+  --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
+wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
 
 # refresh_kubeconfig
 # echo "==> Deploying kibana"
