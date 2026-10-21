@@ -7,6 +7,12 @@ on:
       - main
   workflow_dispatch:
 
+# Enforce a concurrency group to auto-cancel older runs if a new push happens, 
+# preventing parallel workflows from hitting the same Terraform state.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   id-token: write
   contents: read
@@ -14,6 +20,9 @@ permissions:
 env:
   AWS_REGION: "ap-south-2"
   CLUSTER_NAME: "ibts-eks"
+  # Global lock timeout so Terraform gracefully waits instead of immediately failing
+  TF_CLI_ARGS_plan: "-lock-timeout=3m"
+  TF_CLI_ARGS_apply: "-lock-timeout=3m"
 
 jobs:
   # =========================================
