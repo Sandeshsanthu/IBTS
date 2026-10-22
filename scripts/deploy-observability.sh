@@ -766,107 +766,13 @@ kubectl get events -n "$OBS_NAMESPACE" \
   --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
 wait_for_pods "$OBS_NAMESPACE" "kube-prometheus-stack" 1800
 
-# refresh_kubeconfig
-# echo "==> Deploying elasticsearch"
-# helm install elasticsearch elastic/elasticsearch \
-#   -n "$OBS_NAMESPACE" --version 8.5.1 --timeout 15m \
-#   --set replicas=1 \
-#   --set minimumMasterNodes=1 \
-#   --set esJavaOpts="-Xmx512m -Xms512m" \
-#   --set resources.requests.cpu=500m \
-#  --set resources.requests.memory=1Gi \
-#   --set resources.limits.cpu=1000m \
-#   --set resources.limits.memory=1536Mi \
-#   --set sysctlInitContainer.enabled=true \
-#   --set sysctlVmMaxMapCount=262144 \
-#   --set volumeClaimTemplate.storageClassName=gp3 \
-#   --set volumeClaimTemplate.resources.requests.storage=10Gi \
-#   --set nodeSelector."node\.kubernetes\.io/instance-type"=t3.large \
-#   --set "esConfig.elasticsearch\\.yml=xpack.security.enabled: false\nxpack.ml.enabled: false\n"
 
-# echo "==> State 15s after helm install:"
-# sleep 15
-# kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
-# kubectl get events -n "$OBS_NAMESPACE" \
-#   --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
-# wait_for_pods "$OBS_NAMESPACE" "elasticsearch" 900
-
-# refresh_kubeconfig
-# echo "==> Deploying kibana"
-# helm install kibana elastic/kibana \
-#   -n "$OBS_NAMESPACE" --version 8.5.1 --timeout 10m \
-#   --set "elasticsearchHosts=http://elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local:9200"
-
-# echo "==> State 15s after helm install:"
-# sleep 15
-# kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
-# kubectl get events -n "$OBS_NAMESPACE" \
-#   --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
-# wait_for_pods "$OBS_NAMESPACE" "kibana" 600
-
-# refresh_kubeconfig
-# echo "==> Deploying otel-collector"
-# helm install otel-collector \
-#   open-telemetry/opentelemetry-collector \
-#   -n "$OBS_NAMESPACE" --version 0.91.0 --timeout 5m \
-#   --set mode=deployment \
-#   --set image.repository=otel/opentelemetry-collector-contrib
-
-# echo "==> State 15s after helm install:"
-# sleep 15
-# kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
-# kubectl get events -n "$OBS_NAMESPACE" \
-#   --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
-# wait_for_pods "$OBS_NAMESPACE" "otel-collector" 300
-
-# refresh_kubeconfig
-# echo "==> Deploying jaeger"
-# helm install jaeger jaegertracing/jaeger \
-#   -n "$OBS_NAMESPACE" --version 3.0.0 --timeout 5m \
-#   --set provisionDataStore.cassandra=false \
-#   --set provisionDataStore.elasticsearch=false \
-#   --set storage.type=elasticsearch \
-#   --set "storage.elasticsearch.host=elasticsearch-master.${OBS_NAMESPACE}.svc.cluster.local" \
-#   --set storage.elasticsearch.port=9200 \
-#   --set agent.enabled=false
-
-# echo "==> State 15s after helm install:"
-# sleep 15
-# kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
-# kubectl get events -n "$OBS_NAMESPACE" \
-#   --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
-# wait_for_pods "$OBS_NAMESPACE" "jaeger" 300
-
-# refresh_kubeconfig
-# echo "==> Deploying fluent-bit"
-# helm install fluent-bit fluent/fluent-bit \
-#   -n "$OBS_NAMESPACE" --version 0.46.7 --timeout 5m
-
-# echo "==> State 15s after helm install:"
-# sleep 15
-# kubectl get all    -n "$OBS_NAMESPACE" 2>/dev/null || true
-# kubectl get events -n "$OBS_NAMESPACE" \
-#   --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
-# wait_for_pods "$OBS_NAMESPACE" "fluent-bit" 300
-
-# =========================================
-# SUMMARY
-# =========================================
 echo ""
 echo "=========================================="
 echo " DEPLOYMENT COMPLETE"
 echo "=========================================="
 
-# echo "Observability releases:"
-# for release in kube-prometheus-stack elasticsearch kibana \
-#                otel-collector jaeger fluent-bit; do
-#   STATUS=$(helm status "$release" -n "$OBS_NAMESPACE" \
-#     --output json 2>/dev/null \
-#     | python3 -c "import sys,json; \
-#         print(json.load(sys.stdin)['info']['status'])" \
-#     2>/dev/null || echo "not-found")
-#   printf "  %-30s %s\n" "$release" "$STATUS"
-# done
+
 
 echo ""
 echo "Nodes:"
