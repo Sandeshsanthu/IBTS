@@ -14,15 +14,16 @@ spec:
     metadata:
       labels:
         app: ibts-redis
+        logging: "true" # Enables Fluent-Bit to categorize and route your database logs
     spec:
       containers:
+        # Container 1: The Core Redis Engine
         - name: ibts-redis
           image: redis:7.2-alpine
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 6379
               name: redis-port
-          # Explicit resources ensure it passes your ibts-app ResourceQuota
           resources:
             requests:
               cpu: "100m"
@@ -47,6 +48,21 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 3
+
+        # Container 2: Metrics Sidecar Exporter (Translates Redis stats to Prometheus format)
+        - name: redis-exporter
+          image: oliver006/redis_exporter:v1.55.0-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9121
+              name: metrics
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"
       volumes:
         - name: redis-data
           persistentVolumeClaim:
@@ -64,3 +80,39 @@ spec:
   resources:
     requests:
       storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ibts-redis
+  namespace: ibts-app
+  labels:
+    app: ibts-redis
+spec:
+  selector:
+    app: ibts-redis
+  ports:
+    - name: redis-port
+      protocol: TCP
+      port: 6379
+      targetPort: 6379
+    - name: metrics
+      protocol: TCP
+      port: 9121
+      targetPort: 9121
+---
+apiVersion: ://coreos.com
+kind: ServiceMonitor
+metadata:
+  name: ibts-redis-monitor
+  namespace: ibts-app
+  labels:
+    release: kube-prometheus-stack # Informs the Prometheus Operator to scrape this target
+spec:
+  selector:
+    matchLabels:
+      app: ibts-redis
+  endpoints:
+    - port: metrics
+      interval: 15s
+      path: /metrics
