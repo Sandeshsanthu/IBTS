@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-bank-server
+  namespace: ibts-app
+  labels:
+    app: mock-bank-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-bank-server
+  template:
+    metadata:
+      labels:
+        app: mock-bank-server
+        logging: "true"
+    spec:
+      containers:
+        - name: mock-bank-server
+          image: wiremock/wiremock:3.5.4
+          args: ["--verbose"]
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          volumeMounts:
+            - name: mappings
+              mountPath: /home/wiremock/mappings
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /__admin/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /__admin/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /__admin/health
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+      volumes:
+        - name: mappings
+          configMap:
+            name: wiremock-mappings
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-bank-server
+  namespace: ibts-app
+  labels:
+    app: mock-bank-server
+spec:
+  selector:
+    app: mock-bank-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
