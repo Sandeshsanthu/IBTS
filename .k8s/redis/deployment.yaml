@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ibts-redis
+  namespace: ibts-app
+  labels:
+    app: ibts-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ibts-redis
+  template:
+    metadata:
+      labels:
+        app: ibts-redis
+    spec:
+      containers:
+        - name: ibts-redis
+          image: redis:7.2-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6379
+              name: redis-port
+          # Explicit resources ensure it passes your ibts-app ResourceQuota
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-pvc
+  namespace: ibts-app
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3 # Using your EKS gp3 storage class
+  resources:
+    requests:
+      storage: 2Gi

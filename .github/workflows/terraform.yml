@@ -2,16 +2,13 @@
 name: "IBTS Infrastructure"
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       confirm:
         description: 'Type "yes" to confirm running this infrastructure deployment'
         required: true
         type: string
-        default: 'no'
+        default: "no"
 
 # Enforce a concurrency group to auto-cancel older runs if a new push happens, 
 # preventing parallel workflows from hitting the same Terraform state.

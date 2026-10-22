@@ -51,18 +51,16 @@ force_remove_release() {
   fi
 }
 
-# Returns 0 (= install needed) or 1 (= already deployed, skip).
-# Anything not 'deployed' (failed, pending, orphaned pods) is cleaned first.
-needs_install() {
+# CHANGED (replaces needs_install): only cleans a release that is BROKEN
+# (failed / pending-*). A healthy 'deployed' release is left in place so the
+# following 'helm upgrade --install' can apply new settings to it.
+clean_if_broken() {
   local rel=$1 st
   st=$(release_status "$rel")
-  if [[ "$st" == "deployed" ]]; then
-    echo "  [SKIP] ${rel} already deployed"
-    return 1
+  if [[ -n "$st" && "$st" != "deployed" ]]; then
+    echo "  [WARN] ${rel} is in state '${st}' -- cleaning before reinstall"
+    force_remove_release "$rel"
   fi
-  [[ -n "$st" ]] && echo "  [WARN] ${rel} is in state '${st}' -- cleaning before reinstall"
-  force_remove_release "$rel"
-  return 0
 }
 
 # Prints readyReplicas for a workload, or 0 if missing / none ready
@@ -79,6 +77,29 @@ es_http_ok() {
   code=$(kubectl exec -n "$NS" elasticsearch-master-0 -c elasticsearch -- \
     curl -s -o /dev/null -w '%{http_code}' localhost:9200 2>/dev/null || true)
   [[ "$code" == "200" ]]
+}
+
+# NEW: call the Elasticsearch API from inside the ES pod.
+# usage: es_api METHOD PATH [JSON_BODY]    -- prints the response
+es_api() {
+  local args=(-s -X "$1" -H 'Content-Type: application/json')
+  if [[ -n "${3:-}" ]]; then
+    args+=(-d "$3")
+  fi
+  kubectl exec -n "$NS" elasticsearch-master-0 -c elasticsearch -- \
+    curl "${args[@]}" "localhost:9200$2"
+  echo
+}
+
+# NEW: same as es_api, but fails the script unless ES answers acknowledged:true
+es_api_ack() {
+  local out
+  out=$(es_api "$@")
+  echo "  $out"
+  if ! grep -q '"acknowledged":true' <<< "$out"; then
+    echo "  [FAIL] Elasticsearch did not acknowledge: $1 $2"
+    exit 1
+  fi
 }
 
 # Helm silently ignores unknown --set keys. Warn if a key pattern is not
@@ -108,7 +129,7 @@ helm repo update
 # The namespace LimitRange gives every container without limits 500m CPU,
 # so DaemonSets cost 500m PER NODE and the 10-CPU limits quota fills up.
 # Set small explicit limits on node-exporter BEFORE anything else rolls.
-# (Persistent fix: pass the same values in deploy-observability.sh.)
+# (Persistent fix: now also passed in deploy-observability.sh -- see notes.)
 # =====================================================================
 echo "==> Quota headroom: node-exporter limits"
 NODE_EXP_DS="kube-prometheus-stack-prometheus-node-exporter"
@@ -138,6 +159,8 @@ else
       -n "$NS" --ignore-not-found --wait=true --timeout=3m
   fi
 
+  warn_if_chart_key_missing elastic/elasticsearch 8.5.1 'podAnnotations'
+
   ES_CONFIG_FILE=$(mktemp /tmp/elasticsearch-XXXXXX.yml)
   cat << 'EOF' > "$ES_CONFIG_FILE"
 xpack.security.enabled: false
@@ -149,6 +172,9 @@ EOF
   # Do NOT set secret.enabled=false: the chart's readiness probe requires
   # ELASTIC_PASSWORD, which is only injected when the secret is enabled.
   # (With security off, Elasticsearch ignores the password.)
+  #
+  # CHANGED: podAnnotations karpenter.sh/do-not-disrupt stops Karpenter
+  # consolidation from evicting the stateful ES pod.
   helm install elasticsearch elastic/elasticsearch \
     -n "$NS" --version 8.5.1 --timeout 15m --wait \
     --set replicas=1 \
@@ -165,6 +191,7 @@ EOF
     --set nodeSelector."node\.kubernetes\.io/instance-type"=t3.large \
     --set createCert=false \
     --set protocol=http \
+    --set-string 'podAnnotations.karpenter\.sh/do-not-disrupt=true' \
     --set-file esConfig."elasticsearch\.yml"="$ES_CONFIG_FILE"
   rm -f "$ES_CONFIG_FILE"
 
@@ -258,12 +285,35 @@ fi
 
 # =====================================================================
 # STAGE 3: OPENTELEMETRY COLLECTOR
+# CHANGED: traces are now exported to Jaeger over OTLP (the chart default
+# was the 'debug' exporter, which discards everything).
+# Pipeline lists are written in full because Helm REPLACES lists.
+# Logs and metrics pipelines still use 'debug' for now.
 # =====================================================================
 echo "==> Stage 3: otel-collector"
-# upgrade --install so the explicit limits apply to an existing release.
+clean_if_broken otel-collector
+
+OTEL_VALUES=$(mktemp /tmp/otel-values-XXXXXX.yaml)
+cat << EOF > "$OTEL_VALUES"
+config:
+  exporters:
+    otlp/jaeger:
+      endpoint: jaeger-collector.${NS}.svc.cluster.local:4317
+      tls:
+        insecure: true
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp, jaeger, zipkin]
+        processors: [memory_limiter, batch]
+        exporters: [otlp/jaeger]
+EOF
+
+# upgrade --install so the settings apply to an existing release.
 # command.name must match the binary in the contrib image.
 helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
   -n "$NS" --version 0.91.0 --timeout 5m --wait \
+  -f "$OTEL_VALUES" \
   --set mode=deployment \
   --set image.repository=otel/opentelemetry-collector-contrib \
   --set command.name=otelcol-contrib \
@@ -271,53 +321,81 @@ helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
   --set resources.requests.memory=128Mi \
   --set resources.limits.cpu=250m \
   --set resources.limits.memory=512Mi
+rm -f "$OTEL_VALUES"
 
 # =====================================================================
 # STAGE 4: JAEGER
+# CHANGED: upgrade --install (fixes apply on re-run), OTLP ports published
+# on the collector Service, ES_NUM_REPLICAS=0 for single-node ES.
 # =====================================================================
 echo "==> Stage 4: jaeger"
-if needs_install jaeger; then
-  # needs_install has already removed any failed release, its record and
-  # its pods, so their CPU quota is free again.
-  echo "--- Quota before Jaeger:"
-  kubectl describe resourcequota -n "$NS" || true
+clean_if_broken jaeger
 
-  warn_if_chart_key_missing jaegertracing/jaeger 3.0.0 'agentSidecar'
-  warn_if_chart_key_missing jaegertracing/jaeger 3.0.0 'usePassword'
+echo "--- Quota before Jaeger:"
+kubectl describe resourcequota -n "$NS" || true
 
-  # Small explicit limits keep the namespace CPU quota from being exhausted.
-  # query.agentSidecar.enabled=false drops the extra agent container.
-  helm install jaeger jaegertracing/jaeger \
-    -n "$NS" --version 3.0.0 --timeout 5m --wait \
-    --set provisionDataStore.cassandra=false \
-    --set provisionDataStore.elasticsearch=false \
-    --set storage.type=elasticsearch \
-    --set "storage.elasticsearch.host=elasticsearch-master.${NS}.svc.cluster.local" \
-    --set storage.elasticsearch.port=9200 \
-    --set storage.elasticsearch.usePassword=false \
-    --set agent.enabled=false \
-    --set query.agentSidecar.enabled=false \
-    --set collector.resources.requests.cpu=100m \
-    --set collector.resources.requests.memory=128Mi \
-    --set collector.resources.limits.cpu=250m \
-    --set collector.resources.limits.memory=256Mi \
-    --set query.resources.requests.cpu=100m \
-    --set query.resources.requests.memory=128Mi \
-    --set query.resources.limits.cpu=250m \
-    --set query.resources.limits.memory=256Mi
+warn_if_chart_key_missing jaegertracing/jaeger 3.0.0 'agentSidecar'
+warn_if_chart_key_missing jaegertracing/jaeger 3.0.0 'usePassword'
+warn_if_chart_key_missing jaegertracing/jaeger 3.0.0 'otlp'
+warn_if_chart_key_missing jaegertracing/jaeger 3.0.0 'extraEnv'
+
+# Small explicit limits keep the namespace CPU quota from being exhausted.
+# query.agentSidecar.enabled=false drops the extra agent container.
+helm upgrade --install jaeger jaegertracing/jaeger \
+  -n "$NS" --version 3.0.0 --timeout 5m --wait \
+  --set provisionDataStore.cassandra=false \
+  --set provisionDataStore.elasticsearch=false \
+  --set storage.type=elasticsearch \
+  --set "storage.elasticsearch.host=elasticsearch-master.${NS}.svc.cluster.local" \
+  --set storage.elasticsearch.port=9200 \
+  --set storage.elasticsearch.usePassword=false \
+  --set agent.enabled=false \
+  --set query.agentSidecar.enabled=false \
+  --set collector.service.otlp.grpc.name=otlp-grpc \
+  --set collector.service.otlp.grpc.port=4317 \
+  --set collector.service.otlp.http.name=otlp-http \
+  --set collector.service.otlp.http.port=4318 \
+  --set 'collector.extraEnv[0].name=ES_NUM_REPLICAS' \
+  --set-string 'collector.extraEnv[0].value=0' \
+  --set 'query.extraEnv[0].name=ES_NUM_REPLICAS' \
+  --set-string 'query.extraEnv[0].value=0' \
+  --set collector.resources.requests.cpu=100m \
+  --set collector.resources.requests.memory=128Mi \
+  --set collector.resources.limits.cpu=250m \
+  --set collector.resources.limits.memory=256Mi \
+  --set query.resources.requests.cpu=100m \
+  --set query.resources.requests.memory=128Mi \
+  --set query.resources.limits.cpu=250m \
+  --set query.resources.limits.memory=256Mi
+
+# NEW: fail now if OTLP isn't published, instead of finding out later from
+# a trace that never shows up.
+if ! kubectl get svc jaeger-collector -n "$NS" \
+     -o jsonpath='{.spec.ports[*].port}' | grep -qw 4317; then
+  echo "  [FAIL] jaeger-collector Service has no port 4317 -- chart OTLP keys differ"
+  echo "         Run: helm show values jaegertracing/jaeger --version 3.0.0 | grep -n -i otlp"
+  exit 1
 fi
+echo "  [OK] jaeger-collector publishes OTLP :4317"
 
 # =====================================================================
 # STAGE 5: FLUENT-BIT (DaemonSet -- limits matter: cost is per node)
+# CHANGED: upgrade --install, tolerate ALL taints so it runs on every node,
+# Replace_Dots + Trace_Error on the ES outputs.
 # =====================================================================
 echo "==> Stage 5: fluent-bit"
-if needs_install fluent-bit; then
-  warn_if_chart_key_missing fluent/fluent-bit 0.46.7 '^resources'
+clean_if_broken fluent-bit
 
-  # Suppress_Type_Name On: Elasticsearch 8 rejects the legacy _type field
-  # in bulk requests. Remove this block if your fluent-bit version complains.
-  FB_OUTPUTS_FILE=$(mktemp /tmp/fluent-bit-outputs-XXXXXX.conf)
-  cat << EOF > "$FB_OUTPUTS_FILE"
+warn_if_chart_key_missing fluent/fluent-bit 0.46.7 '^resources'
+warn_if_chart_key_missing fluent/fluent-bit 0.46.7 '^tolerations'
+
+# Suppress_Type_Name On: Elasticsearch 8 rejects the legacy _type field
+# in bulk requests.
+# Replace_Dots On: avoids field-mapping conflicts from labels such as
+# app.kubernetes.io/name vs a plain "app" label.
+# Trace_Error On: ES rejections show up in the Fluent Bit logs.
+FB_OUTPUTS_FILE=$(mktemp /tmp/fluent-bit-outputs-XXXXXX.conf)
+cat << EOF > "$FB_OUTPUTS_FILE"
 [OUTPUT]
     Name  es
     Match kube.*
@@ -325,6 +403,8 @@ if needs_install fluent-bit; then
     Port  9200
     Logstash_Format On
     Suppress_Type_Name On
+    Replace_Dots On
+    Trace_Error On
     Retry_Limit False
 
 [OUTPUT]
@@ -335,18 +415,59 @@ if needs_install fluent-bit; then
     Logstash_Format On
     Logstash_Prefix node
     Suppress_Type_Name On
+    Replace_Dots On
+    Trace_Error On
     Retry_Limit False
 EOF
 
-  helm install fluent-bit fluent/fluent-bit \
-    -n "$NS" --version 0.46.7 --timeout 5m --wait \
-    --set resources.requests.cpu=50m \
-    --set resources.requests.memory=64Mi \
-    --set resources.limits.cpu=100m \
-    --set resources.limits.memory=128Mi \
-    --set-file config.outputs="$FB_OUTPUTS_FILE"
-  rm -f "$FB_OUTPUTS_FILE"
+helm upgrade --install fluent-bit fluent/fluent-bit \
+  -n "$NS" --version 0.46.7 --timeout 5m --wait \
+  --set 'tolerations[0].operator=Exists' \
+  --set resources.requests.cpu=50m \
+  --set resources.requests.memory=64Mi \
+  --set resources.limits.cpu=100m \
+  --set resources.limits.memory=128Mi \
+  --set-file config.outputs="$FB_OUTPUTS_FILE"
+rm -f "$FB_OUTPUTS_FILE"
+
+EXPECT_NODES=$(kubectl get nodes --no-headers | wc -l | tr -d ' ')
+FB_READY=$(kubectl get ds fluent-bit -n "$NS" -o jsonpath='{.status.numberReady}')
+if [[ "${FB_READY:-0}" == "$EXPECT_NODES" ]]; then
+  echo "  [OK] fluent-bit running on all ${EXPECT_NODES} nodes"
+else
+  echo "  [WARN] fluent-bit ready=${FB_READY:-0} nodes=${EXPECT_NODES} (Karpenter may still be scaling)"
 fi
+
+# =====================================================================
+# STAGE 6 (NEW): ELASTICSEARCH REPLICAS + RETENTION
+# Single-node ES can never allocate replicas (indices stay yellow), and a
+# 10Gi disk fills quickly without retention.
+# =====================================================================
+echo "==> Stage 6: elasticsearch replicas + retention"
+es_http_ok || { echo "  [FAIL] elasticsearch not answering on HTTP"; exit 1; }
+
+# Delete log indices 7 days after creation
+es_api_ack PUT /_ilm/policy/ibts-logs-7d \
+  '{"policy":{"phases":{"delete":{"min_age":"7d","actions":{"delete":{}}}}}}'
+
+# New daily indices from Fluent Bit: 0 replicas + retention policy
+es_api_ack PUT /_index_template/ibts-logs \
+  '{"index_patterns":["logstash-*","node-*"],"priority":200,"template":{"settings":{"index.number_of_replicas":0,"index.lifecycle.name":"ibts-logs-7d"}}}'
+
+# Indices that already exist
+es_api_ack PUT '/logstash-*,node-*/_settings' \
+  '{"index":{"number_of_replicas":0,"lifecycle":{"name":"ibts-logs-7d"}}}'
+JAEGER_OUT=$(es_api PUT '/jaeger-*/_settings?ignore_unavailable=true&allow_no_indices=true' \
+  '{"index":{"number_of_replicas":0}}' || true)
+if grep -q '"acknowledged":true' <<< "$JAEGER_OUT"; then
+  echo "  [OK] jaeger indices set to 0 replicas"
+else
+  echo "  [INFO] no jaeger indices yet (created on first trace) -- skipping"
+fi
+
+echo "  Cluster health:"
+es_api GET '/_cluster/health?filter_path=status,unassigned_shards'
+echo "  [OK] replicas + retention configured"
 
 # =========================================
 # SUMMARY
@@ -358,4 +479,6 @@ echo "=========================================="
 helm list -n "$NS"
 kubectl get pods -n "$NS"
 kubectl get pvc  -n "$NS"
+kubectl get ds fluent-bit -n "$NS"
+kubectl get svc jaeger-collector otel-collector-opentelemetry-collector -n "$NS"
 kubectl describe resourcequota -n "$NS"
