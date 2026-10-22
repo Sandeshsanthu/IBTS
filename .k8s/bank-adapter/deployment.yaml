@@ -14,16 +14,28 @@ spec:
     metadata:
       labels:
         app: bank-adapter
-        logging: "true" # Fluent-Bit picks this up for log processing
+        logging: "true"
     spec:
       containers:
         - name: bank-adapter
           image: sandeshs/ibts-bank-adapter:63f878b4cf3540cd3d45de3f3d9c25d047e16262
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8082 # Aligned directly with your tf app config URL
+            - containerPort: 8082
               name: http
-          # Injects all AWS, DynamoDB, OTel, and database URLs automatically from Terraform
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: PRIMARY_TIMEOUT_SECONDS
+              value: "3.0"
+            - name: FALLBACK_TIMEOUT_SECONDS
+              value: "5.0"
+            - name: BREAKER_FAIL_MAX
+              value: "3"
+            - name: BREAKER_RESET_TIMEOUT
+              value: "30"
+            - name: OTEL_SERVICE_NAME
+              value: "bank-adapter"
           envFrom:
             - configMapRef:
                 name: ibts-shared-config
@@ -34,18 +46,23 @@ spec:
             limits:
               cpu: "500m"
               memory: "256Mi"
+          # Aligned precisely with your Docker compose config rule
           readinessProbe:
             httpGet:
-              path: /actuator/health/readiness
+              path: /actuator/health
               port: http
             initialDelaySeconds: 10
-            periodSeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /actuator/health/liveness
+              path: /actuator/health
               port: http
             initialDelaySeconds: 15
             periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -60,5 +77,5 @@ spec:
   ports:
     - name: http
       protocol: TCP
-      port: 8082 # Exposing on port 8082 as expected by your cluster services
+      port: 8082
       targetPort: http
