@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bank-adapter
+  namespace: ibts-app
+  labels:
+    app: bank-adapter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bank-adapter
+  template:
+    metadata:
+      labels:
+        app: bank-adapter
+        logging: "true" # Fluent-Bit picks this up for log processing
+    spec:
+      containers:
+        - name: bank-adapter
+          image: sandeshs/ibts-bank-adapter:63f878b4cf3540cd3d45de3f3d9c25d047e16262
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082 # Aligned directly with your tf app config URL
+              name: http
+          # Injects all AWS, DynamoDB, OTel, and database URLs automatically from Terraform
+          envFrom:
+            - configMapRef:
+                name: ibts-shared-config
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bank-adapter
+  namespace: ibts-app
+  labels:
+    app: bank-adapter
+spec:
+  selector:
+    app: bank-adapter
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8082 # Exposing on port 8082 as expected by your cluster services
+      targetPort: http
