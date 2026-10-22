@@ -17,52 +17,60 @@ spec:
         logging: "true"
     spec:
       containers:
-        - name: bank-adapter
-          image: sandeshs/ibts-bank-adapter:63f878b4cf3540cd3d45de3f3d9c25d047e16262
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 8082
-              name: http
-          env:
-            - name: PYTHONUNBUFFERED
-              value: "1"
-            - name: PRIMARY_TIMEOUT_SECONDS
-              value: "3.0"
-            - name: FALLBACK_TIMEOUT_SECONDS
-              value: "5.0"
-            - name: BREAKER_FAIL_MAX
-              value: "3"
-            - name: BREAKER_RESET_TIMEOUT
-              value: "30"
-            - name: OTEL_SERVICE_NAME
-              value: "bank-adapter"
-          envFrom:
-            - configMapRef:
-                name: ibts-shared-config
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
-              memory: "256Mi"
-          # Aligned precisely with your Docker compose config rule
-          readinessProbe:
-            httpGet:
-              path: /actuator/health
-              port: http
-            initialDelaySeconds: 10
-            periodSeconds: 15
-            timeoutSeconds: 5
-            failureThreshold: 3
-          livenessProbe:
-            httpGet:
-              path: /actuator/health
-              port: http
-            initialDelaySeconds: 15
-            periodSeconds: 15
-            timeoutSeconds: 5
-            failureThreshold: 3
+      - name: bank-adapter
+        image: sandeshs/ibts-bank-adapter:63f878b4cf3540cd3d45de3f3d9c25d047e16262
+        ports:
+        - containerPort: 8082
+          name: http
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: PRIMARY_TIMEOUT_SECONDS
+          value: "3.0"
+        - name: FALLBACK_TIMEOUT_SECONDS
+          value: "5.0"
+        - name: BREAKER_FAIL_MAX
+          value: "3"
+        - name: BREAKER_RESET_TIMEOUT
+          value: "30"
+        - name: OTEL_SERVICE_NAME
+          value: "bank-adapter"
+        # Correctly maps the Docker service name 'ibts-otel-collector' to EKS internal DNS
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://cluster.local"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "http/protobuf"
+        - name: OTEL_TRACES_EXPORTER
+          value: "otlp"
+        - name: OTEL_METRICS_EXPORTER
+          value: "none"
+        - name: OTEL_LOGS_EXPORTER
+          value: "none"
+        - name: OTEL_PYTHON_LOG_CORRELATION
+          value: "true"
+        
+        # Exact mirror of your Docker Compose healthcheck using raw execution
+        livenessProbe:
+          exec:
+            command:
+            - curl
+            - -f
+            - http://localhost:8082/actuator/health
+          initialDelaySeconds: 15
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - curl
+            - -f
+            - http://localhost:8082/actuator/health
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+
 ---
 apiVersion: v1
 kind: Service
