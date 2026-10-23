@@ -137,7 +137,7 @@ resource "aws_iam_policy" "idempotency_guard" {
     Statement = [{
       Sid      = "DynamoDBIdempotency"
       Effect   = "Allow"
-      Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"]
+      Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DescribeTable"]
       Resource = "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/IdempotencyRecords"
     }]
   })
