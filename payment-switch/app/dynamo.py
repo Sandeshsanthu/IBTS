@@ -21,16 +21,13 @@ log = logging.getLogger(__name__)
 def _build_table() -> TrackedDynamoTable:
     raw = boto3.resource(
         "dynamodb",
-        endpoint_url          = settings.dynamodb_endpoint_url,
-        region_name           = settings.aws_default_region,
-        aws_access_key_id     = settings.aws_access_key_id,
-        aws_secret_access_key = settings.aws_secret_access_key,
+        **settings.aws_client_kwargs(settings.dynamodb_endpoint_url),
     ).Table(settings.dynamodb_table_name)
 
     return TrackedDynamoTable(
-        table      = raw,
-        table_name = settings.dynamodb_table_name,
-        service    = os.getenv("SERVICE_NAME", "payment-switch"),
+        table=raw,
+        table_name=settings.dynamodb_table_name,
+        service=os.getenv("SERVICE_NAME", "payment-switch"),
     )
 
 

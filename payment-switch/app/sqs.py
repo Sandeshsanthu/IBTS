@@ -13,10 +13,7 @@ log = logging.getLogger(__name__)
 def _client():
     return boto3.client(
         "sqs",
-        endpoint_url=settings.sqs_endpoint_url,
-        region_name=settings.aws_default_region,
-        aws_access_key_id=settings.aws_access_key_id,
-        aws_secret_access_key=settings.aws_secret_access_key,
+        **settings.aws_client_kwargs(settings.sqs_endpoint_url),
     )
 
 def emit_settlement_event(txn_id: str, bank_code: str, amount_paise: int) -> None:

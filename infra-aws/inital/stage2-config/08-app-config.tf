@@ -16,6 +16,7 @@ resource "kubernetes_config_map" "ibts_shared" {
     DYNAMODB_TABLE_NAME_TRANSACTIONS    = aws_dynamodb_table.ibts_transactions.name
     ROUTING_TABLE_NAME                  = aws_dynamodb_table.routing_table.name
     SQS_QUEUE_NAME                      = aws_sqs_queue.settlement_events.name
+    SQS_ENDPOINT_URL                    = "https://sqs.${var.aws_region}.amazonaws.com"
 
     # OpenTelemetry
     OTEL_EXPORTER_OTLP_ENDPOINT         = "http://otel-collector-opentelemetry-collector.${kubernetes_namespace.ibts_observability.metadata[0].name}.svc.cluster.local:4318"
