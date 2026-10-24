@@ -67,15 +67,24 @@ resource "aws_iam_policy" "payment_switch" {
       {
         Sid    = "DynamoDBTransactions"
         Effect = "Allow"
-        Action = ["dynamodb:GetItem", "dynamodb:PutItem",
-        "dynamodb:UpdateItem", "dynamodb:Query"]
-        Resource = "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/ibts-transactions"
+        Action = [
+          "dynamodb:DescribeTable",
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query",
+          "dynamodb:Scan"
+        ]
+        Resource = aws_dynamodb_table.ibts_transactions.arn
       },
       {
-        Sid      = "SQSSettlement"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage", "sqs:GetQueueUrl"]
-        Resource = "arn:aws:sqs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:ibts-settlement-events"
+        Sid    = "SQSSettlement"
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage",
+          "sqs:GetQueueUrl"
+        ]
+        Resource = aws_sqs_queue.settlement_events.arn
       }
     ]
   })
