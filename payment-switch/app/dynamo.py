@@ -27,7 +27,9 @@ def _build_table():
     endpoint_url = settings.dynamodb_endpoint_url
     client_kwargs = settings.aws_client_kwargs(endpoint_url)
     resource = boto3.resource("dynamodb", **client_kwargs)
-    return TrackedDynamoTable(resource.Table(settings.dynamodb_table_name))
+    table_name = settings.dynamodb_table_name
+    table = resource.Table(table_name)
+    return TrackedDynamoTable(table, table_name, "payment-switch")
 
 
 _table = _build_table()
@@ -45,7 +47,6 @@ def _record_to_item(record) -> dict:
     else:
         raise TypeError("Transaction record must be a Pydantic model or mapping")
 
-    # Accept either spelling when a plain mapping is passed.
     if _aws_mode() and "txn_id" in item and "transaction_id" not in item:
         item["transaction_id"] = item.pop("txn_id")
     elif not _aws_mode() and "transaction_id" in item and "txn_id" not in item:
