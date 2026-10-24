@@ -51,13 +51,13 @@ jobs:
         run: aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
 
       - name: Validate manifests (server-side dry run)
-        run: kubectl apply --dry-run=server -f .k8s/bank-adapter/
+        run: kubectl apply --dry-run=server -f .k8s/idempotency-guard
 
       - name: Apply Kubernetes Manifests
         run: kubectl apply -f .k8s/idempotency-guard/
 
       - name: Wait for rollout
-        run: kubectl -n ibts-app rollout status deploy/bank-adapter --timeout=180s
+        run: kubectl -n ibts-app rollout status deploy/idempotency-guard --timeout=180s
 
       - name: Post-deploy validation checks
         run: |
