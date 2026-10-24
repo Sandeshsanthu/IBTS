@@ -30,11 +30,11 @@ class TestGetTxn:
     def test_returns_item_when_found(self, tracked_table):
         from app import dynamo
         tracked_table.get_item.return_value = {
-            "Item": {"transaction_id": "txn-001", "state": "SUCCESS"}
+            "Item": {"txn_id": "txn-001", "state": "SUCCESS"}
         }
         result = dynamo.get_txn("txn-001")
-        assert result["transaction_id"] == "txn-001"
-        tracked_table.get_item.assert_called_with(Key={"transaction_id": "txn-001"})
+        assert result["txn_id"] == "txn-001"
+        tracked_table.get_item.assert_called_with(Key={"txn_id": "txn-001"})
 
     def test_returns_none_when_not_found(self, tracked_table):
         from app import dynamo
@@ -48,10 +48,10 @@ class TestGetTxnByIdempotencyKey:
     def test_returns_first_matching_item(self, tracked_table):
         from app import dynamo
         tracked_table.scan.return_value = {
-            "Items": [{"transaction_id": "txn-001", "idempotency_key": "idem-001"}]
+            "Items": [{"txn_id": "txn-001", "idempotency_key": "idem-001"}]
         }
         result = dynamo.get_txn_by_idempotency_key("idem-001")
-        assert result["transaction_id"] == "txn-001"
+        assert result["txn_id"] == "txn-001"
 
     def test_returns_none_when_no_match(self, tracked_table):
         from app import dynamo
@@ -65,10 +65,10 @@ class TestGetTxnByBankRrn:
     def test_returns_first_matching_item(self, tracked_table):
         from app import dynamo
         tracked_table.scan.return_value = {
-            "Items": [{"transaction_id": "txn-001", "bank_rrn": "SBI-RRN-001"}]
+            "Items": [{"txn_id": "txn-001", "bank_rrn": "SBI-RRN-001"}]
         }
         result = dynamo.get_txn_by_bank_rrn("SBI-RRN-001")
-        assert result["transaction_id"] == "txn-001"
+        assert result["txn_id"] == "txn-001"
 
     def test_returns_none_when_no_match(self, tracked_table):
         from app import dynamo
@@ -104,4 +104,4 @@ class TestUpdateState:
         from app.models import TxnState
         dynamo.update_state("txn-abc", TxnState.PROCESSING)
         call_kwargs = tracked_table.update_item.call_args[1]
-        assert call_kwargs["Key"] == {"transaction_id": "txn-abc"}
+        assert call_kwargs["Key"] == {"txn_id": "txn-abc"}
