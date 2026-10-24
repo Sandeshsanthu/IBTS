@@ -14,6 +14,9 @@ from shared.metrics.dynamo_tracker import TrackedDynamoTable
 
 log = logging.getLogger(__name__)
 
+# DynamoDB table partition-key attribute.
+PARTITION_KEY = "transaction_id"
+
 
 # ── Module-level cached table ──────────────────────────────────────────────────
 # Previously _table() created a new boto3 resource on every call — expensive.
@@ -44,62 +47,73 @@ def _now() -> str:
 def write_txn(record: TxnRecord) -> None:
     record.created_at = _now()
     record.updated_at = record.created_at
-    _table.put_item(Item=record.model_dump())             # ← auto-timed
+
+    # Pydantic alias maps the app's txn_id field to DynamoDB's transaction_id key.
+    _table.put_item(Item=record.model_dump(by_alias=True))
+
     log.info("txn_id=%s state=%s written", record.txn_id, record.state)
 
 
 # ── Update ─────────────────────────────────────────────────────────────────────
 def update_state(
-    txn_id:    str,
-    state:     TxnState,
-    bank_rrn:  str | None = None,
+    txn_id: str,
+    state: TxnState,
+    bank_rrn: str | None = None,
     bank_code: str | None = None,
-    error:     str | None = None,
+    error: str | None = None,
 ) -> None:
-    expr  = "SET #s = :s, updated_at = :u"
+    expr = "SET #s = :s, updated_at = :u"
     names = {"#s": "state"}
-    vals  = {":s": state.value, ":u": _now()}
+    vals = {":s": state.value, ":u": _now()}
 
     if bank_rrn:
-        expr += ", bank_rrn = :r";  vals[":r"] = bank_rrn
-    if bank_code:
-        expr += ", bank_code = :b"; vals[":b"] = bank_code
-    if error:
-        expr += ", #e = :err";      names["#e"] = "error"; vals[":err"] = error
+        expr += ", bank_rrn = :r"
+        vals[":r"] = bank_rrn
 
-    _table.update_item(                                    # ← auto-timed
-        Key                       = {"txn_id": txn_id},
-        UpdateExpression          = expr,
-        ExpressionAttributeNames  = names,
-        ExpressionAttributeValues = vals,
+    if bank_code:
+        expr += ", bank_code = :b"
+        vals[":b"] = bank_code
+
+    if error:
+        expr += ", #e = :err"
+        names["#e"] = "error"
+        vals[":err"] = error
+
+    _table.update_item(
+        Key={PARTITION_KEY: txn_id},
+        UpdateExpression=expr,
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=vals,
     )
+
     log.info("txn_id=%s → %s", txn_id, state)
 
 
 # ── Read by primary key ────────────────────────────────────────────────────────
 def get_txn(txn_id: str) -> dict | None:
-    resp = _table.get_item(Key={"txn_id": txn_id})        # ← auto-timed
+    resp = _table.get_item(Key={PARTITION_KEY: txn_id})
     return resp.get("Item")
 
 
-# ── Read by idempotency key (scan — no GSI required) ──────────────────────────
+# ── Read by idempotency key (scan — no GSI required) ───────────────────────────
 def get_txn_by_idempotency_key(idempotency_key: str) -> dict | None:
     """
     Scan table for matching idempotency_key.
     No GSI required — acceptable for low-volume test/dev use.
     For production: replace with a GSI query on idempotency_key.
 
-    NOTE: DynamoDB Limit caps items *scanned*, not returned —
-    omitting it guarantees we don't miss the record in a small table.
+    NOTE: DynamoDB Limit caps items scanned, not returned.
+    Omitting it avoids missing a matching record in a small table.
     """
-    resp  = _table.scan(                                   # ← auto-timed
+    resp = _table.scan(
         FilterExpression=Attr("idempotency_key").eq(idempotency_key)
     )
+
     items = resp.get("Items", [])
     return items[0] if items else None
 
 
-# ── Read by bank RRN (scan — for duplicate debit detection) ───────────────────
+# ── Read by bank RRN (scan — for duplicate debit detection) ────────────────────
 def get_txn_by_bank_rrn(bank_rrn: str) -> dict | None:
     """
     Scan table for a matching bank_rrn (bank reference number).
@@ -116,16 +130,18 @@ def get_txn_by_bank_rrn(bank_rrn: str) -> dict | None:
             Limit=2,
         )
     """
-    resp  = _table.scan(                                   # ← auto-timed
+    resp = _table.scan(
         FilterExpression=Attr("bank_rrn").eq(bank_rrn),
     )
+
     items = resp.get("Items", [])
 
     if len(items) > 1:
         log.warning(
             "get_txn_by_bank_rrn: %d records share bank_rrn=%s — "
             "possible duplicate debit",
-            len(items), bank_rrn,
+            len(items),
+            bank_rrn,
         )
 
     return items[0] if items else None
