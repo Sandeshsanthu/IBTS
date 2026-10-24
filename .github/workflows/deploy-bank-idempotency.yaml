@@ -1,4 +1,4 @@
-name: "IBTS Bank Adapter Deploy"
+name: "IBTS idempotency Deploy"
 
 on:
   workflow_dispatch:
