@@ -1,0 +1,64 @@
+name: "IBTS payment-switch Deploy"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "yes" to confirm running this deployment'
+        required: true
+        type: string
+        default: "no"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: "ap-south-2"
+  CLUSTER_NAME: "ibts-eks"
+
+jobs:
+  deploy-bank-adapter:
+    name: "Deploy payment-switch Service"
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Check Confirmation
+        env:
+          CONFIRM: ${{ github.event.inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "yes" ]; then
+            echo "Deployment halted: confirmation was not yes."
+            exit 1
+          fi
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: "BankAdapterDeploy"
+
+      - name: Connect to EKS Cluster
+        run: aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
+
+      - name: Validate manifests (server-side dry run)
+        run: kubectl apply --dry-run=server -f .k8s/payment-switch/
+
+      - name: Apply Kubernetes Manifests
+        run: kubectl apply -f .k8s/payment-switch/
+
+      - name: Wait for rollout
+        run: kubectl -n ibts-app rollout status deploy/payment-switch --timeout=180s
+
+      - name: Post-deploy validation checks
+        run: |
+          kubectl -n ibts-app get pods,svc,endpoints -l app=payment-switch
