@@ -61,4 +61,4 @@ jobs:
 
       - name: Post-deploy validation checks
         run: |
-          kubectl -n ibts-app get pods,svc,endpoints -l app=bank-adapter
+          kubectl -n ibts-app get pods,svc,endpoints -l app=idempotency-guard
