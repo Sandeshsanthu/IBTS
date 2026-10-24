@@ -15,7 +15,7 @@ class TestInsertIfAbsent:
     def test_new_record_returns_true(self, dynamo_table):
         dynamo_table.put_item.return_value = {}
         from app import store
-        record = {"idempotencyKey": "idem-001", "status": "PROCESSING"}
+        record = {"idempotency_key": "idem-001", "status": "PROCESSING"}
         result = store.insert_if_absent(record)
         assert result is True
         dynamo_table.put_item.assert_called_once()
@@ -25,7 +25,7 @@ class TestInsertIfAbsent:
             "ConditionalCheckFailedException"
         )
         from app import store
-        record = {"idempotencyKey": "idem-001", "status": "PROCESSING"}
+        record = {"idempotency_key": "idem-001", "status": "PROCESSING"}
         result = store.insert_if_absent(record)
         assert result is False
 
@@ -34,21 +34,21 @@ class TestInsertIfAbsent:
             "ProvisionedThroughputExceededException"
         )
         from app import store
-        record = {"idempotencyKey": "idem-001", "status": "PROCESSING"}
+        record = {"idempotency_key": "idem-001", "status": "PROCESSING"}
         with pytest.raises(ClientError):
             store.insert_if_absent(record)
 
     def test_ttl_field_added_to_record(self, dynamo_table):
         dynamo_table.put_item.return_value = {}
         from app import store
-        record = {"idempotencyKey": "idem-001", "status": "PROCESSING"}
+        record = {"idempotency_key": "idem-001", "status": "PROCESSING"}
         store.insert_if_absent(record)
         assert "expiresAt" in record
 
     def test_put_item_called_with_condition(self, dynamo_table):
         dynamo_table.put_item.return_value = {}
         from app import store
-        record = {"idempotencyKey": "idem-001", "status": "PROCESSING"}
+        record = {"idempotency_key": "idem-001", "status": "PROCESSING"}
         store.insert_if_absent(record)
         call_kwargs = dynamo_table.put_item.call_args[1]
         assert "ConditionExpression" in call_kwargs
@@ -58,11 +58,11 @@ class TestFindByKey:
 
     def test_returns_item_when_found(self, dynamo_table):
         dynamo_table.get_item.return_value = {
-            "Item": {"idempotencyKey": "idem-001", "status": "SUCCESS"}
+            "Item": {"idempotency_key": "idem-001", "status": "SUCCESS"}
         }
         from app import store
         result = store.find_by_key("idem-001")
-        assert result["idempotencyKey"] == "idem-001"
+        assert result["idempotency_key"] == "idem-001"
         assert result["status"]         == "SUCCESS"
 
     def test_returns_none_when_not_found(self, dynamo_table):
@@ -119,7 +119,7 @@ class TestComplete:
         from app import store
         store.complete("idem-abc", "FAILED", None)
         call_kwargs = dynamo_table.update_item.call_args[1]
-        assert call_kwargs["Key"] == {"idempotencyKey": "idem-abc"}
+        assert call_kwargs["Key"] == {"idempotency_key": "idem-abc"}
 
 
 class TestScanAll:
@@ -127,8 +127,8 @@ class TestScanAll:
     def test_returns_all_items(self, dynamo_table):
         dynamo_table.scan.return_value = {
             "Items": [
-                {"idempotencyKey": "idem-001"},
-                {"idempotencyKey": "idem-002"},
+                {"idempotency_key": "idem-001"},
+                {"idempotency_key": "idem-002"},
             ]
         }
         from app import store
