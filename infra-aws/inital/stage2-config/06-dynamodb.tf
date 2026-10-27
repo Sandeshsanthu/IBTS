@@ -46,10 +46,10 @@ resource "aws_dynamodb_table" "ibts_transactions" {
 resource "aws_dynamodb_table" "routing_table" {
   name         = "routing-table"
   billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "vpa_suffix"
+  hash_key     = "bankCode"
 
   attribute {
-    name = "vpa_suffix"
+    name = "bankCode"
     type = "S"
   }
 

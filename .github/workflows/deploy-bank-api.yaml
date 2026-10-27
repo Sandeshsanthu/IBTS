@@ -1,4 +1,4 @@
-name: "IBTS API GATeway Deploy"
+name: "IBTS API Gateway Deploy"
 
 on:
   workflow_dispatch:
@@ -22,8 +22,8 @@ env:
   CLUSTER_NAME: "ibts-eks"
 
 jobs:
-  deploy-bank-adapter:
-    name: "Deploy Api-GATeway Service"
+  deploy-api-gateway:
+    name: "Deploy Api-Gateway Service"
     runs-on: ubuntu-latest
     environment: production
 
@@ -45,10 +45,28 @@ jobs:
         with:
           role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
           aws-region: ${{ env.AWS_REGION }}
-          role-session-name: "BankAdapterDeploy"
+          role-session-name: "ApiGatewayDeploy"
 
       - name: Connect to EKS Cluster
         run: aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
+
+      # ✅ ADDED: Ensure the application namespace exists first
+      - name: Ensure Namespace Exists
+        run: |
+          kubectl create namespace ibts-app --dry-run=client -o yaml | kubectl apply -f -
+
+      # ✅ ADDED: Inject secrets from GitHub Actions Secrets before deployment
+      # Note: Make sure to add PROD_API_KEY and PROD_JWT_SECRET to your GitHub Repo Secrets
+      - name: Create or Update Kubernetes Secrets
+        env:
+          API_KEY: ${{ secrets.PROD_API_KEY }}
+          JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+        run: |
+          kubectl create secret generic api-gateway-secrets \
+            -n ibts-app \
+            --from-literal=API_KEY="$API_KEY" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Validate manifests (server-side dry run)
         run: kubectl apply --dry-run=server -f .k8s/api-gateway
