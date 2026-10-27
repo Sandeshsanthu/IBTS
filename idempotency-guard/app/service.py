@@ -23,7 +23,7 @@ def check(idempotency_key: str, caller_service: str, request: CheckRequest) -> C
 
     now = int(time.time() * 1000)
     new_record = {
-        "idempotencyKey": idempotency_key,
+        "idempotency_key": idempotency_key,
         "callerService": caller_service,
         "transactionRefId": request.transactionRefId,
         "status": "PROCESSING",

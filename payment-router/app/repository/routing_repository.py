@@ -7,6 +7,7 @@ import time
 
 import boto3
 from app.config import settings
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -55,32 +56,42 @@ logger.info("Routing seed mode: ENV=%s  routes=%d", _ENV, len(SEED_ROUTES))
 class RoutingRepository:
 
     def __init__(self):
-        self._client = boto3.resource(
-            "dynamodb",
-            region_name           = settings.aws_region,
-            endpoint_url          = settings.dynamo_endpoint,
-            aws_access_key_id     = settings.aws_access_key_id,
-            aws_secret_access_key = settings.aws_secret_access_key,
-        )
+        # Only pass what is set. Unset endpoint -> real AWS; unset keys -> IRSA / default chain.
+        kwargs = {"region_name": settings.aws_region}
+        if settings.dynamo_endpoint:
+            kwargs["endpoint_url"] = settings.dynamo_endpoint
+        if settings.aws_access_key_id and settings.aws_secret_access_key:
+            kwargs["aws_access_key_id"] = settings.aws_access_key_id
+            kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+
+        self._client = boto3.resource("dynamodb", **kwargs)
         self._table = None
         self._init_table()
 
     def _init_table(self):
+        self._table = self._client.Table(settings.routing_table_name)
         try:
-            self._client.create_table(
-                TableName            = settings.routing_table_name,
-                KeySchema            = [{"AttributeName": "bankCode", "KeyType": "HASH"}],
-                AttributeDefinitions = [{"AttributeName": "bankCode", "AttributeType": "S"}],
-                BillingMode          = "PAY_PER_REQUEST",
+            self._table.load()  # DescribeTable
+            logger.info("Table exists - skipping create/seed: %s", settings.routing_table_name)
+            return
+        except ClientError as err:
+            if err.response["Error"]["Code"] != "ResourceNotFoundException":
+                raise
+
+        if not _IS_LOCAL:
+            raise RuntimeError(
+                f"Table {settings.routing_table_name} is missing; it is Terraform-managed"
             )
-            logger.info("Created table: %s", settings.routing_table_name)
-            self._table = self._client.Table(settings.routing_table_name)
-            self._table.wait_until_exists()
-            self._seed()
-        except self._client.meta.client.exceptions.ResourceInUseException:
-            logger.info("Table already exists — skipping seed: %s", settings.routing_table_name)
-            self._table = self._client.Table(settings.routing_table_name)
-            self._table.wait_until_exists()
+
+        self._client.create_table(
+            TableName            = settings.routing_table_name,
+            KeySchema            = [{"AttributeName": "bankCode", "KeyType": "HASH"}],
+            AttributeDefinitions = [{"AttributeName": "bankCode", "AttributeType": "S"}],
+            BillingMode          = "PAY_PER_REQUEST",
+        )
+        logger.info("Created table: %s", settings.routing_table_name)
+        self._table.wait_until_exists()
+        self._seed()
 
     def _seed(self):
         for code, name, primary, fallback in SEED_ROUTES:
@@ -95,7 +106,7 @@ class RoutingRepository:
         logger.info("Seeded %d routes", len(SEED_ROUTES))
 
     def find_by_bank_code(self, bank_code: str) -> dict | None:
-        """Synchronous DynamoDB point read — cache is handled by RoutingService."""
+        """Synchronous DynamoDB point read - cache is handled by RoutingService."""
         resp = self._table.get_item(Key={"bankCode": bank_code})
         item = resp.get("Item")
         if item and item.get("active"):
