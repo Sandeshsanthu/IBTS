@@ -99,7 +99,7 @@ def get_txn_by_bank_rrn(bank_rrn: str):
     return None
 
 
-def update_state(txn_id, state, bank_rrn=None, error=None):
+def update_state(txn_id, state, bank_rrn=None, error=None, bank_code=None):
     state_value = getattr(state, "value", state)
     update_expression = "SET #state = :state, updated_at = :updated_at"
     expression_attribute_names = {"#state": "state"}
@@ -111,6 +111,10 @@ def update_state(txn_id, state, bank_rrn=None, error=None):
     if bank_rrn is not None:
         update_expression += ", bank_rrn = :r"
         expression_attribute_values[":r"] = bank_rrn
+
+    if bank_code is not None:
+        update_expression += ", bank_code = :bc"
+        expression_attribute_values[":bc"] = bank_code
 
     if error is not None:
         update_expression += ", #error = :err"
