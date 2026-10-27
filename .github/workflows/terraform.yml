@@ -240,18 +240,18 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "DeployObservability"
 
-      - name: Deploy observability stack
-        env:
-          TF_VAR_grafana_admin_password: ${{ secrets.TF_VAR_GRAFANA_ADMIN_PASSWORD }}
-        run: |
-          CLUSTER_NAME=$(aws eks list-clusters --region ${{ env.AWS_REGION }} --query 'clusters[0]' --output text)
-          chmod +x scripts/deploy-observability.sh
-          ./scripts/deploy-observability.sh \
-            $(aws eks list-clusters \
-                --region ${{ env.AWS_REGION }} \
-                --query 'clusters[0]' \
-                --output text) \
-            ${{ env.AWS_REGION }}
+      # - name: Deploy observability stack
+      #   env:
+      #     TF_VAR_grafana_admin_password: ${{ secrets.TF_VAR_GRAFANA_ADMIN_PASSWORD }}
+      #   run: |
+      #     CLUSTER_NAME=$(aws eks list-clusters --region ${{ env.AWS_REGION }} --query 'clusters[0]' --output text)
+      #     chmod +x scripts/deploy-observability.sh
+      #     ./scripts/deploy-observability.sh \
+      #       $(aws eks list-clusters \
+      #           --region ${{ env.AWS_REGION }} \
+      #           --query 'clusters[0]' \
+      #           --output text) \
+      #       ${{ env.AWS_REGION }}
 
-          chmod +x scripts/deploy-logging-tracing.sh
-          ./scripts/deploy-logging-tracing.sh "$CLUSTER_NAME" ${{ env.AWS_REGION }}
+      #     chmod +x scripts/deploy-logging-tracing.sh
+      #     ./scripts/deploy-logging-tracing.sh "$CLUSTER_NAME" ${{ env.AWS_REGION }}

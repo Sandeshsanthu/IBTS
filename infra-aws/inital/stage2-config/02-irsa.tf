@@ -115,8 +115,8 @@ resource "aws_iam_policy" "payment_router" {
     Statement = [{
       Sid      = "DynamoDBRoutingTableRead"
       Effect   = "Allow"
-      Action   = ["dynamodb:GetItem", "dynamodb:Scan", "dynamodb:Query"]
-      Resource = "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/routing-table"
+      Action   = ["dynamodb:DescribeTable", "dynamodb:GetItem", "dynamodb:Scan", "dynamodb:Query"]
+      Resource = aws_dynamodb_table.routing_table.arn
     }]
   })
 }
