@@ -39,6 +39,8 @@ spec:
               value: "24"
             - name: PYTHONUNBUFFERED
               value: "1"
+            - name: OTEL_SERVICE_NAME
+              value: idempotency-guard
           resources:
             requests:
               cpu: 100m
