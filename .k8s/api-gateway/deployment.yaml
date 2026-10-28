@@ -104,3 +104,22 @@ spec:
     - name: http
       port: 8084
       targetPort: http
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-gateway
+  namespace: ibts-app
+  labels:
+    app: api-gateway
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: api-gateway
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
