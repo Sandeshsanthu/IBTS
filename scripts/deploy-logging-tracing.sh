@@ -7,6 +7,13 @@ export OBS_NAMESPACE="${OBS_NAMESPACE:-ibts-observability}"
 NS="$OBS_NAMESPACE"
 echo "==> Targeted Namespace: ${NS}"
 
+# Same fallback as before. Use a password without double quotes or backslashes
+# (it is written into a YAML values file below).
+if [[ -z "${TF_VAR_grafana_admin_password:-}" ]]; then
+  echo "  [WARN] TF_VAR_grafana_admin_password not set -- using dev fallback password"
+fi
+GRAFANA_PASSWORD="${TF_VAR_grafana_admin_password:-ibts-grafana-dev}"
+
 # ---------------------------------------------------------------------
 # HELPERS
 # ---------------------------------------------------------------------
@@ -51,9 +58,9 @@ force_remove_release() {
   fi
 }
 
-# CHANGED (replaces needs_install): only cleans a release that is BROKEN
-# (failed / pending-*). A healthy 'deployed' release is left in place so the
-# following 'helm upgrade --install' can apply new settings to it.
+# Only cleans a release that is BROKEN (failed / pending-*). A healthy
+# 'deployed' release is left in place so the following
+# 'helm upgrade --install' can apply new settings to it.
 clean_if_broken() {
   local rel=$1 st
   st=$(release_status "$rel")
@@ -79,7 +86,7 @@ es_http_ok() {
   [[ "$code" == "200" ]]
 }
 
-# NEW: call the Elasticsearch API from inside the ES pod.
+# Call the Elasticsearch API from inside the ES pod.
 # usage: es_api METHOD PATH [JSON_BODY]    -- prints the response
 es_api() {
   local args=(-s -X "$1" -H 'Content-Type: application/json')
@@ -91,7 +98,7 @@ es_api() {
   echo
 }
 
-# NEW: same as es_api, but fails the script unless ES answers acknowledged:true
+# Same as es_api, but fails the script unless ES answers acknowledged:true
 es_api_ack() {
   local out
   out=$(es_api "$@")
@@ -118,6 +125,7 @@ warn_if_chart_key_missing() {
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> Configuring Helm Repositories..."
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add elastic        https://helm.elastic.co
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
 helm repo add jaegertracing  https://jaegertracing.github.io/helm-charts
@@ -125,21 +133,82 @@ helm repo add fluent         https://fluent.github.io/helm-charts
 helm repo update
 
 # =====================================================================
-# QUOTA HEADROOM
+# STAGE 0: KUBE-PROMETHEUS-STACK
 # The namespace LimitRange gives every container without limits 500m CPU,
-# so DaemonSets cost 500m PER NODE and the 10-CPU limits quota fills up.
-# Set small explicit limits on node-exporter BEFORE anything else rolls.
-# (Persistent fix: now also passed in deploy-observability.sh -- see notes.)
+# and DaemonSets pay that PER NODE, which fills the CPU limits quota.
+# So explicit small limits are set here in the Helm values (persistent,
+# unlike 'kubectl set resources', which the next helm upgrade overwrites).
+# Pipeline: values file + upgrade --install + --wait (idempotent).
 # =====================================================================
-echo "==> Quota headroom: node-exporter limits"
-NODE_EXP_DS="kube-prometheus-stack-prometheus-node-exporter"
-if kubectl get ds "$NODE_EXP_DS" -n "$NS" >/dev/null 2>&1; then
-  kubectl set resources ds/"$NODE_EXP_DS" -n "$NS" -c node-exporter \
-    --requests=cpu=50m,memory=32Mi --limits=cpu=100m,memory=64Mi
-  kubectl rollout status ds/"$NODE_EXP_DS" -n "$NS" --timeout=5m
-else
-  echo "  [SKIP] $NODE_EXP_DS not found"
-fi
+echo "==> Stage 0: kube-prometheus-stack"
+clean_if_broken kube-prometheus-stack
+
+# Webhooks are disabled below; remove stale configs from earlier runs so they
+# cannot block PrometheusRule / ServiceMonitor creation.
+kubectl delete mutatingwebhookconfiguration kube-prometheus-stack-admission --ignore-not-found
+kubectl delete validatingwebhookconfiguration kube-prometheus-stack-admission --ignore-not-found
+
+PROM_VALUES=$(mktemp /tmp/prom-values-XXXXXX.yaml)
+cat << EOF > "$PROM_VALUES"
+prometheusOperator:
+  tls:
+    enabled: false
+  admissionWebhooks:
+    enabled: false
+    patch:
+      enabled: false
+    certManager:
+      enabled: false
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits:   {cpu: 200m, memory: 256Mi}
+prometheus:
+  prometheusSpec:
+    retention: 30d
+    resources:
+      requests: {cpu: 200m, memory: 768Mi}
+      limits:   {cpu: 1000m, memory: 1536Mi}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          resources:
+            requests:
+              storage: 20Gi
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: {cpu: 25m, memory: 64Mi}
+      limits:   {cpu: 100m, memory: 128Mi}
+grafana:
+  adminPassword: "${GRAFANA_PASSWORD}"
+  persistence:
+    enabled: true
+    storageClassName: gp3
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits:   {cpu: 500m, memory: 512Mi}
+  sidecar:
+    resources:
+      requests: {cpu: 25m, memory: 64Mi}
+      limits:   {cpu: 100m, memory: 128Mi}
+kube-state-metrics:
+  resources:
+    requests: {cpu: 25m, memory: 64Mi}
+    limits:   {cpu: 100m, memory: 128Mi}
+prometheus-node-exporter:
+  resources:
+    requests: {cpu: 50m, memory: 32Mi}
+    limits:   {cpu: 100m, memory: 64Mi}
+EOF
+
+helm upgrade --install kube-prometheus-stack \
+  prometheus-community/kube-prometheus-stack \
+  -n "$NS" --version 58.2.2 --timeout 30m --wait \
+  -f "$PROM_VALUES"
+rm -f "$PROM_VALUES"
+
+kubectl get pods -n "$NS" --no-headers
 kubectl describe resourcequota -n "$NS" || true
 
 # =====================================================================
@@ -173,7 +242,7 @@ EOF
   # ELASTIC_PASSWORD, which is only injected when the secret is enabled.
   # (With security off, Elasticsearch ignores the password.)
   #
-  # CHANGED: podAnnotations karpenter.sh/do-not-disrupt stops Karpenter
+  # podAnnotations karpenter.sh/do-not-disrupt stops Karpenter
   # consolidation from evicting the stateful ES pod.
   helm install elasticsearch elastic/elasticsearch \
     -n "$NS" --version 8.5.1 --timeout 15m --wait \
@@ -285,8 +354,8 @@ fi
 
 # =====================================================================
 # STAGE 3: OPENTELEMETRY COLLECTOR
-# CHANGED: traces are now exported to Jaeger over OTLP (the chart default
-# was the 'debug' exporter, which discards everything).
+# Traces are exported to Jaeger over OTLP (the chart default was the
+# 'debug' exporter, which discards everything).
 # Pipeline lists are written in full because Helm REPLACES lists.
 # Logs and metrics pipelines still use 'debug' for now.
 # =====================================================================
@@ -325,7 +394,7 @@ rm -f "$OTEL_VALUES"
 
 # =====================================================================
 # STAGE 4: JAEGER
-# CHANGED: upgrade --install (fixes apply on re-run), OTLP ports published
+# upgrade --install (fixes apply on re-run), OTLP ports published
 # on the collector Service, ES_NUM_REPLICAS=0 for single-node ES.
 # =====================================================================
 echo "==> Stage 4: jaeger"
@@ -368,7 +437,7 @@ helm upgrade --install jaeger jaegertracing/jaeger \
   --set query.resources.limits.cpu=250m \
   --set query.resources.limits.memory=256Mi
 
-# NEW: fail now if OTLP isn't published, instead of finding out later from
+# Fail now if OTLP isn't published, instead of finding out later from
 # a trace that never shows up.
 if ! kubectl get svc jaeger-collector -n "$NS" \
      -o jsonpath='{.spec.ports[*].port}' | grep -qw 4317; then
@@ -380,7 +449,7 @@ echo "  [OK] jaeger-collector publishes OTLP :4317"
 
 # =====================================================================
 # STAGE 5: FLUENT-BIT (DaemonSet -- limits matter: cost is per node)
-# CHANGED: upgrade --install, tolerate ALL taints so it runs on every node,
+# upgrade --install, tolerate ALL taints so it runs on every node,
 # Replace_Dots + Trace_Error on the ES outputs.
 # =====================================================================
 echo "==> Stage 5: fluent-bit"
@@ -439,7 +508,7 @@ else
 fi
 
 # =====================================================================
-# STAGE 6 (NEW): ELASTICSEARCH REPLICAS + RETENTION
+# STAGE 6: ELASTICSEARCH REPLICAS + RETENTION
 # Single-node ES can never allocate replicas (indices stay yellow), and a
 # 10Gi disk fills quickly without retention.
 # =====================================================================
@@ -452,33 +521,4 @@ es_api_ack PUT /_ilm/policy/ibts-logs-7d \
 
 # New daily indices from Fluent Bit: 0 replicas + retention policy
 es_api_ack PUT /_index_template/ibts-logs \
-  '{"index_patterns":["logstash-*","node-*"],"priority":200,"template":{"settings":{"index.number_of_replicas":0,"index.lifecycle.name":"ibts-logs-7d"}}}'
-
-# Indices that already exist
-es_api_ack PUT '/logstash-*,node-*/_settings' \
-  '{"index":{"number_of_replicas":0,"lifecycle":{"name":"ibts-logs-7d"}}}'
-JAEGER_OUT=$(es_api PUT '/jaeger-*/_settings?ignore_unavailable=true&allow_no_indices=true' \
-  '{"index":{"number_of_replicas":0}}' || true)
-if grep -q '"acknowledged":true' <<< "$JAEGER_OUT"; then
-  echo "  [OK] jaeger indices set to 0 replicas"
-else
-  echo "  [INFO] no jaeger indices yet (created on first trace) -- skipping"
-fi
-
-echo "  Cluster health:"
-es_api GET '/_cluster/health?filter_path=status,unassigned_shards'
-echo "  [OK] replicas + retention configured"
-
-# =========================================
-# SUMMARY
-# =========================================
-echo ""
-echo "=========================================="
-echo " DEPLOYMENT COMPLETE"
-echo "=========================================="
-helm list -n "$NS"
-kubectl get pods -n "$NS"
-kubectl get pvc  -n "$NS"
-kubectl get ds fluent-bit -n "$NS"
-kubectl get svc jaeger-collector otel-collector-opentelemetry-collector -n "$NS"
-kubectl describe resourcequota -n "$NS"
+  '{"index_patterns":["logstash-*","node-*"],"priority":200,"template":{"settings":{"index
