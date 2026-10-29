@@ -521,4 +521,4 @@ es_api_ack PUT /_ilm/policy/ibts-logs-7d \
 
 # New daily indices from Fluent Bit: 0 replicas + retention policy
 es_api_ack PUT /_index_template/ibts-logs \
-  '{"index_patterns":["logstash-*","node-*"],"priority":200,"template":{"settings":{"index
+  '{"index_patterns":["logstash-*","node-*"],"priority":200,"template":{"settings":{"index.lifecycle.name":"ibts-logs-7d","number_of_replicas":0}}}'

@@ -11,12 +11,7 @@ on:
         required: true
         type: string
         default: "no"
-  # Optional: auto-run after the infra pipeline succeeds on main.
-  # Replace the name with the exact `name:` of the infra workflow.
-  # workflow_run:
-  #   workflows: ["IBTS Infrastructure"]
-  #   types: [completed]
-  #   branches: [main]
+
 
 permissions:
   id-token: write
@@ -66,16 +61,7 @@ jobs:
             --region "$AWS_REGION" --name "$CLUSTER_NAME"
           kubectl get nodes
 
-      - name: Karpenter stack loading
-        if: ${{ inputs.run_karpenter }}
-        run: |
-          chmod +x scripts/karpenter.sh
-          ./scripts/karpenter.sh "$CLUSTER_NAME" "$AWS_REGION"
 
-      - name: Verify Karpenter prerequisites
-        run: |
-          kubectl get nodepool default
-          kubectl get storageclass gp3
 
       - name: Require Grafana password secret
         env:
