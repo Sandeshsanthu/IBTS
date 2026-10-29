@@ -11,11 +11,6 @@ on:
         required: true
         type: string
         default: "no"
-      run_karpenter:
-        description: "Also run scripts/karpenter.sh before the observability stack"
-        required: false
-        type: boolean
-        default: false
   # Optional: auto-run after the infra pipeline succeeds on main.
   # Replace the name with the exact `name:` of the infra workflow.
   # workflow_run:
