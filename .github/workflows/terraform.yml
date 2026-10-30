@@ -222,35 +222,32 @@ jobs:
   # =========================================
   # OBSERVABILITY DEPLOY
   # =========================================
-  deploy-observability:
-    name: "Deploy Observability Stack"
-    needs: stage2-apply
-    if: always() && !cancelled()
-    runs-on: ubuntu-latest
-    environment: production
-    env:
-      AWS_REGION: "ap-south-2"
+  # deploy-observability:
+  #   name: "Deploy Observability Stack"
+  #   needs: stage2-apply
+  #   if: always() && !cancelled()
+  #   runs-on: ubuntu-latest
+  #   environment: production
+  #   env:
+  #     AWS_REGION: "ap-south-2"
 
-    steps:
-      - uses: actions/checkout@v4
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
-          aws-region: ${{ env.AWS_REGION }}
-          role-session-name: "DeployObservability"
+  #     - uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-session-name: "DeployObservability"
 
-      - name: Karpentet Stack loading
+  #     - name: Karpentet Stack loading
 
-        run: |
-          CLUSTER_NAME=$(aws eks list-clusters --region ${{ env.AWS_REGION }} --query 'clusters[0]' --output text)
-          chmod +x scripts/karpenter.sh
-          ./scripts/karpenter.sh \
-            $(aws eks list-clusters \
-                --region ${{ env.AWS_REGION }} \
-                --query 'clusters[0]' \
-                --output text) \
-            ${{ env.AWS_REGION }}
-
-          # chmod +x scripts/deploy-logging-tracing.sh
-          # ./scripts/deploy-logging-tracing.sh "$CLUSTER_NAME" ${{ env.AWS_REGION }}
+  #       run: |
+  #         CLUSTER_NAME=$(aws eks list-clusters --region ${{ env.AWS_REGION }} --query 'clusters[0]' --output text)
+  #         chmod +x scripts/karpenter.sh
+  #         ./scripts/karpenter.sh \
+  #           $(aws eks list-clusters \
+  #               --region ${{ env.AWS_REGION }} \
+  #               --query 'clusters[0]' \
+  #               --output text) \
+  #           ${{ env.AWS_REGION }}
