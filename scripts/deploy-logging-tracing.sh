@@ -492,7 +492,7 @@ EOF
 helm upgrade --install fluent-bit fluent/fluent-bit \
   -n "$NS" --version 0.46.7 --timeout 5m --wait \
   --set 'tolerations[0].operator=Exists' \
-  --set resources.requests.cpu=50m \
+  --set resources.requests.cpu=10m \
   --set resources.requests.memory=64Mi \
   --set resources.limits.cpu=100m \
   --set resources.limits.memory=128Mi \
