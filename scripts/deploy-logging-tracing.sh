@@ -529,63 +529,63 @@ es_api_ack PUT /_index_template/ibts-logs \
 # the Grafana sidecar picks it up automatically (no pod restart).
 # =====================================================================
 
-echo "==> Stage 7: grafana dashboards + datasources"
+# echo "==> Stage 7: grafana dashboards + datasources"
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DASH_DIR="${REPO_ROOT}/metrics/grafana/provisioning/dashboards"
-GRAFANA_FOLDER="${GRAFANA_FOLDER:-IBTS}"
+# REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# DASH_DIR="${REPO_ROOT}/metrics/grafana/provisioning/dashboards"
+# GRAFANA_FOLDER="${GRAFANA_FOLDER:-IBTS}"
 
-shopt -s nullglob
-dash_files=("${DASH_DIR}"/*.json)
-shopt -u nullglob
+# shopt -s nullglob
+# dash_files=("${DASH_DIR}"/*.json)
+# shopt -u nullglob
 
-if (( ${#dash_files[@]} == 0 )); then
-  echo "  [WARN] no dashboard JSON files found in ${DASH_DIR}"
-else
-  for f in "${dash_files[@]}"; do
-    base=$(basename "$f" .json)
+# if (( ${#dash_files[@]} == 0 )); then
+#   echo "  [WARN] no dashboard JSON files found in ${DASH_DIR}"
+# else
+#   for f in "${dash_files[@]}"; do
+#     base=$(basename "$f" .json)
 
-    # Fail early on invalid JSON (only if jq is installed)
-    if command -v jq >/dev/null 2>&1; then
-      jq empty "$f" || { echo "  [FAIL] invalid JSON: $f"; exit 1; }
-    fi
+#     # Fail early on invalid JSON (only if jq is installed)
+#     if command -v jq >/dev/null 2>&1; then
+#       jq empty "$f" || { echo "  [FAIL] invalid JSON: $f"; exit 1; }
+#     fi
 
-    # ConfigMap names must be lowercase, with '-' instead of '_'
-    cm_name="grafana-dash-$(echo "$base" | tr '_A-Z' '-a-z')"
+#     # ConfigMap names must be lowercase, with '-' instead of '_'
+#     cm_name="grafana-dash-$(echo "$base" | tr '_A-Z' '-a-z')"
 
-    # --server-side avoids the 256KB last-applied annotation limit that
-    # large dashboard JSON files often hit with a plain 'kubectl apply'.
-    kubectl create configmap "$cm_name" -n "$NS" \
-        --from-file="${base}.json=${f}" --dry-run=client -o yaml \
-      | kubectl label    --local -f - grafana_dashboard=1 -o yaml \
-      | kubectl annotate --local -f - "grafana_folder=${GRAFANA_FOLDER}" -o yaml \
-      | kubectl apply -n "$NS" --server-side --force-conflicts -f -
+#     # --server-side avoids the 256KB last-applied annotation limit that
+#     # large dashboard JSON files often hit with a plain 'kubectl apply'.
+#     kubectl create configmap "$cm_name" -n "$NS" \
+#         --from-file="${base}.json=${f}" --dry-run=client -o yaml \
+#       | kubectl label    --local -f - grafana_dashboard=1 -o yaml \
+#       | kubectl annotate --local -f - "grafana_folder=${GRAFANA_FOLDER}" -o yaml \
+#       | kubectl apply -n "$NS" --server-side --force-conflicts -f -
 
-    echo "  [OK] dashboard loaded: ${base}"
-  done
-fi
+#     echo "  [OK] dashboard loaded: ${base}"
+#   done
+# fi
 
-# Jaeger datasource, pointing at the in-cluster service. The repo's
-# jaeger.yml points at the docker-compose host 'ibts-jaeger', which does
-# not exist in this cluster. Prometheus is already provisioned by the chart.
-kubectl apply -n "$NS" -f - << EOF
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: grafana-ds-jaeger
-  labels:
-    grafana_datasource: "1"
-data:
-  jaeger-datasource.yaml: |-
-    apiVersion: 1
-    datasources:
-      - name: Jaeger
-        uid: jaeger
-        type: jaeger
-        access: proxy
-        url: http://jaeger-query.${NS}.svc.cluster.local:80
-        isDefault: false
-EOF
+# # Jaeger datasource, pointing at the in-cluster service. The repo's
+# # jaeger.yml points at the docker-compose host 'ibts-jaeger', which does
+# # not exist in this cluster. Prometheus is already provisioned by the chart.
+# kubectl apply -n "$NS" -f - << EOF
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: grafana-ds-jaeger
+#   labels:
+#     grafana_datasource: "1"
+# data:
+#   jaeger-datasource.yaml: |-
+#     apiVersion: 1
+#     datasources:
+#       - name: Jaeger
+#         uid: jaeger
+#         type: jaeger
+#         access: proxy
+#         url: http://jaeger-query.${NS}.svc.cluster.local:80
+#         isDefault: false
+# EOF
 
-echo "  [OK] dashboards + Jaeger datasource applied"
-kubectl get cm -n "$NS" -l grafana_dashboard=1
+# echo "  [OK] dashboards + Jaeger datasource applied"
+# kubectl get cm -n "$NS" -l grafana_dashboard=1
