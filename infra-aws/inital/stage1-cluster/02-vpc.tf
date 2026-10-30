@@ -228,7 +228,8 @@ resource "aws_security_group_rule" "allow_alb_to_nodes_nodeport" {
   from_port                = 30000
   to_port                  = 32767
   protocol                 = "tcp"
-  security_group_id        = data.aws_eks_cluster.eks.vpc_config.cluster_security_group_id
+  # CRITICAL FIX: Added [0] to step into the configuration block list
+  security_group_id        = data.aws_eks_cluster.eks.vpc_config[0].cluster_security_group_id
   source_security_group_id = data.aws_security_group.alb_sg.id
   description              = "Allows ALB to route public traffic to EKS Nodes on NodePorts"
 }
