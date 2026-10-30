@@ -97,7 +97,7 @@ metadata:
   labels:
     app: api-gateway
 spec:
-  type: NodePort
+  type: ClusterIP
   selector:
     app: api-gateway
   ports:
