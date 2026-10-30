@@ -34,19 +34,7 @@ module "eks" {
   }
 
   access_entries = {
-    admin_iam_role = {
-      kubernetes_groups = []
-      principal_arn     = "arn:aws:iam::149614785419:role/admin"
-
-      policy_associations = {
-        admin_policy = {
-          policy_arn = "arn:aws:iam::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = {
-            type = "cluster"
-          }
-        }
-      }
-    }
+ 
   } 
 
   tags = {
