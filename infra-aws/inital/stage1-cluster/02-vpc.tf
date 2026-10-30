@@ -211,25 +211,3 @@ resource "aws_vpc_endpoint" "sqs" {
   tags = { Name = "${var.cluster_name}-sqs-endpoint" }
 }
 
-# cluster thing 
-
-data "aws_eks_cluster" "eks" {
-  name = var.cluster_name
-}
-
-data "aws_security_group" "alb_sg" {
-  filter {
-    name   = "tag:elbv2.k8s.aws/cluster"
-    values = [var.cluster_name]
-  }
-}
-resource "aws_security_group_rule" "allow_alb_to_nodes_nodeport" {
-  type                     = "ingress"
-  from_port                = 30000
-  to_port                  = 32767
-  protocol                 = "tcp"
-  # CRITICAL FIX: Added [0] to step into the configuration block list
-  security_group_id        = data.aws_eks_cluster.eks.vpc_config[0].cluster_security_group_id
-  source_security_group_id = data.aws_security_group.alb_sg.id
-  description              = "Allows ALB to route public traffic to EKS Nodes on NodePorts"
-}
