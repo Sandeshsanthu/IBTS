@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# To turn OFF a service, simply add it to the patches/remover block below, 
+# or comment it out from the base resources list.
+patches:
+  # Example: Uncomment this to remove the mock bank in production environments
+  # - target:
+  #     kind: Deployment
+  #     name: mock-bank-server
+  #   $patch: delete
