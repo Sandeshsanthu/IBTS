@@ -764,3 +764,548 @@ Sensitive values such as JWT secret, API key, and Grafana password should be sup
 Redis is referenced through shared application configuration and is expected to be available inside the ibts-app namespace.
 Karpenter is used for dynamic node provisioning, while the system node group provides stable on-demand capacity for core add-ons.
 
+CI/CD Pipelines
+Overview
+IBTS uses GitHub Actions for CI/CD across application services, AWS infrastructure, Kubernetes platform configuration, GitOps deployment, load balancer provisioning, and observability setup.
+The CI/CD design supports:
+
+Pull request validation
+Static code checks
+Unit testing with coverage gates
+Docker image build and push
+Image digest audit trail
+Kubernetes manifest updates
+Terraform-based infrastructure deployment
+Argo CD GitOps bootstrap
+Load balancer deployment and health validation
+Observability stack deployment
+Manual destroy workflow with safety confirmation
+
+
+Pipeline Inventory
+
+
+
+Workflow
+Trigger
+Purpose
+
+
+
+
+PR Checks
+Push, pull request, manual
+Runs changed-service validation, lint, SAST, unit tests, Docker build, and PR summary
+
+
+IBTS Build, Test, and Push
+Push to main, manual
+Builds application images, pushes to Docker Hub, captures digest audit records, and updates Kubernetes manifests
+
+
+IBTS Infrastructure
+Manual
+Runs Terraform Stage 1 and Stage 2 for EKS, networking, add-ons, AWS resources, and cluster configuration
+
+
+IBTS Load Balancer
+Manual
+Creates or destroys the external Application Load Balancer and binds it to the API Gateway service
+
+
+IBTS ArgoCD Deployment
+Manual
+Installs, updates, or removes Argo CD and bootstraps the IBTS GitOps application
+
+
+Terraform Destroy
+Manual only
+Destroys Stage 2 Kubernetes configuration first, then destroys Stage 1 cluster and VPC resources
+
+
+IBTS Observability
+Manual
+Deploys metrics, logging, and tracing stack into the observability namespace
+
+
+IBTS Dashboard
+Manual
+Imports or updates observability dashboards
+
+
+IBTS ArgoCD Status
+Manual
+Read-only validation of Argo CD sync status, health, drift, and controller details
+
+
+
+
+PR Checks Pipeline
+The PR checks pipeline validates service changes before merge.
+Trigger
+Runs on:
+
+Push to main
+Push to develop
+Pull requests targeting main or develop
+Manual workflow dispatch
+
+Changed Service Detection
+The pipeline uses path filtering to detect changes in:
+
+API Gateway
+Payment Switch
+Payment Router
+Bank Adapter
+Idempotency Guard
+Shared package
+
+This allows checks to run only for services affected by a change.
+Linting
+Linting is performed using Ruff.
+Key behavior:
+
+Runs per changed service
+Uses the shared Ruff configuration
+Produces GitHub-formatted output
+Runs as a non-blocking check
+
+Lint failures are reported but do not block merge.
+SAST
+Static application security testing is performed using Bandit.
+Key behavior:
+
+Runs per changed service
+Generates JSON reports
+Uploads reports as workflow artifacts
+Runs as a non-blocking check
+
+Bandit findings are advisory and do not block merge.
+Unit Tests
+Unit tests are blocking.
+Key behavior:
+
+Runs per changed service
+Installs the shared package
+Installs service dependencies
+Runs pytest
+Generates coverage XML
+Generates JUnit XML
+Enforces 80% coverage threshold
+
+If tests or the coverage gate fail, the PR check fails.
+Docker Build
+The PR pipeline builds Docker images but does not push them.
+Purpose:
+
+Validate Dockerfile correctness
+Validate build context
+Catch container build issues before merge
+
+PR Summary
+The pipeline posts or updates a PR comment with the results of:
+
+Lint
+SAST
+Unit tests
+Docker build
+
+Coverage reports, JUnit test results, and Bandit reports are uploaded as artifacts.
+
+Application Build, Test, and Push Pipeline
+The main application CI pipeline builds and publishes the IBTS service images.
+Trigger
+Runs on:
+
+Push to main
+Manual workflow dispatch
+
+The workflow is triggered when changes are made to:
+
+API Gateway
+Bank Adapter
+Payment Switch
+Payment Router
+Idempotency Guard
+Shared package
+CI workflow file
+
+Pipeline Stages
+The application CI pipeline includes:
+
+Ruff linting
+Bandit SAST
+Secret scanning
+Unit tests
+Docker build and push
+Image digest audit record creation
+Kubernetes manifest update
+
+Secret Scan
+Secret scanning is performed using TruffleHog.
+Key behavior:
+
+Scans changes between base and head commits
+Reports only verified findings
+Runs as an advisory check
+
+Unit Test Gate
+Unit tests run for each application service.
+Test configuration includes:
+
+Python 3.12
+Shared package installation
+Service-level dependencies
+pytest
+pytest coverage
+JUnit output
+80% coverage threshold
+
+If a service has no tests, the workflow skips the coverage gate for that service.
+Docker Image Build and Push
+The pipeline builds and pushes Docker images for:
+
+API Gateway
+Bank Adapter
+Payment Switch
+Payment Router
+Idempotency Guard
+
+Each image is pushed with two tags:
+
+latest
+Git commit SHA
+
+The Git SHA tag provides traceability between source code, container image, and deployment.
+Image Digest Audit
+After each image push, the workflow creates an audit record containing:
+
+Service name
+Git SHA
+Git ref
+Actor
+Build timestamp
+Image tags
+Image digest
+
+Digest audit records are uploaded as artifacts and retained for audit purposes.
+Kubernetes Manifest Update
+After successful image build and push, the workflow updates Kubernetes image tags to the Git SHA.
+This supports GitOps deployment by ensuring Kubernetes manifests reference immutable image versions instead of relying only on latest.
+
+Terraform Infrastructure Pipeline
+The infrastructure pipeline provisions the core AWS and EKS platform using Terraform.
+Trigger
+Runs manually through workflow dispatch.
+Authentication
+The workflow authenticates to AWS using GitHub Actions OIDC and an AWS IAM role. This avoids storing long-lived AWS access keys in GitHub secrets.
+Terraform Version
+The workflow uses Terraform 1.10.5.
+State Lock Handling
+The workflow configures Terraform lock timeouts for plan and apply operations. This allows Terraform to wait for the remote state lock instead of failing immediately.
+Stage 1: Cluster Plan and Apply
+Stage 1 provisions the foundational infrastructure.
+Includes:
+
+VPC
+Public subnets
+Private subnets
+Internet Gateway
+NAT Gateways
+Route tables
+VPC endpoints
+EKS cluster
+System node group
+
+Stage 1 runs as:
+
+Terraform init
+Terraform validate
+Terraform plan
+Upload plan artifact
+Download plan artifact
+Terraform apply
+
+The apply job uses the exact plan generated by the plan job.
+Stage 2: Add-ons and Platform Configuration
+Stage 2 configures the EKS cluster and application platform dependencies.
+Includes:
+
+Kubernetes provider configuration
+Helm provider configuration
+EKS add-ons
+EBS CSI driver
+AWS Load Balancer Controller
+Metrics Server
+Namespaces
+Resource quotas
+Limit ranges
+IRSA roles
+DynamoDB tables
+SQS queues
+Shared application ConfigMap
+
+Stage 2 runs after Stage 1 completes.
+Karpenter Cleanup
+Before Stage 2 apply, the workflow checks the Karpenter Helm release state.
+If Karpenter is stuck in a failed or pending state, the workflow uninstalls the release before applying Terraform. This prevents failed Helm states from blocking the next apply.
+
+Load Balancer Pipeline
+The load balancer pipeline manages the external Application Load Balancer for the API Gateway.
+Trigger
+Runs manually through workflow dispatch.
+Supported actions:
+
+Apply
+Destroy
+
+Preflight Checks
+Before apply, the workflow verifies:
+
+TargetGroupBinding CRD exists
+API Gateway Kubernetes service exists
+API Gateway has ready endpoints
+
+If the API Gateway does not have ready endpoints, the workflow stops before Terraform runs.
+Terraform Actions
+The workflow runs:
+
+Terraform init
+Terraform format check
+Terraform validate
+Terraform plan
+Upload plan artifact
+Download plan artifact
+Terraform apply
+
+For destroy, the workflow creates a destroy plan and applies it.
+Health Validation
+After apply, the workflow waits for ALB targets to become healthy.
+It then performs a smoke test against the API Gateway health endpoint through the ALB.
+Failure Diagnostics
+If validation fails, the workflow collects:
+
+TargetGroupBinding details
+AWS Load Balancer Controller logs
+Target group health information
+
+
+Argo CD Deployment Pipeline
+The Argo CD pipeline installs or removes Argo CD and bootstraps the IBTS GitOps application.
+Trigger
+Runs manually through workflow dispatch.
+Supported actions:
+
+Apply
+Destroy
+
+Inputs
+The workflow accepts:
+
+Confirmation input
+Action
+Argo CD Helm chart version
+Argo CD apps chart version
+Auto-sync flag
+Auto-prune flag
+
+Preflight Validation
+The pipeline performs checks before Terraform plan.
+Checks include:
+
+Confirm input is set to yes
+Auto-prune is only used with auto-sync
+Repository visibility is compatible with the Argo CD configuration
+Terraform backend is configured
+EKS cluster access works
+GitHub Actions role has cluster-admin permissions
+Required bootstrap objects exist
+ServiceMonitor CRD availability is checked
+Helm chart versions exist
+Kustomize build succeeds
+Rendered manifests do not include Kubernetes Secret objects from Git
+
+Terraform Plan and Apply
+The workflow creates a Terraform plan for either apply or destroy.
+The plan artifact includes the Terraform lock file so the apply job uses the same provider versions as the plan job.
+Post-Apply Validation
+After Argo CD is installed, the workflow verifies:
+
+Argo CD server rollout
+Argo CD repo server rollout
+Argo CD ApplicationSet controller rollout
+Argo CD application controller rollout
+Kustomize build options in argocd-cm
+IBTS application sync status
+IBTS application health status
+Application conditions and managed resources
+
+Failure Diagnostics
+If the apply fails, the workflow collects:
+
+Argo CD pods and services
+Argo CD server logs
+Argo CD repo server logs
+IBTS Argo CD application description
+
+
+Terraform Destroy Pipeline
+The destroy workflow is manual only and includes a safety confirmation.
+Safety Confirmation
+The workflow requires the user to type DESTROY.
+If the input does not match exactly, the workflow stops.
+Destroy Order
+The destroy order is important:
+
+Destroy Stage 2 Kubernetes and platform configuration
+Destroy Stage 1 EKS cluster, networking, and VPC resources
+
+Stage 2 must be destroyed first because Kubernetes resources require the cluster to exist during deletion.
+State Cleanup
+The workflow removes orphaned Kubernetes and Helm state references before destroy. This helps avoid failures caused by resources that no longer exist in the cluster.
+Lock Behavior
+The destroy commands use lock bypass behavior to handle state lock issues during teardown.
+This should be used carefully because disabling locks can be risky if another Terraform run is active.
+
+Observability Pipeline
+The observability pipeline deploys metrics, logging, and tracing components.
+Trigger
+Runs manually through workflow dispatch.
+Preflight Checks
+The workflow:
+
+Authenticates to AWS using OIDC
+Verifies AWS identity
+Confirms EKS cluster status
+Updates kubeconfig
+Lists cluster nodes
+Requires the Grafana admin password secret
+
+If the Grafana password secret is missing, the workflow stops to avoid using an unsafe fallback value.
+Deployment
+The workflow runs the observability deployment script.
+The observability stack is deployed into the ibts-observability namespace.
+Failure Diagnostics
+If deployment fails, the workflow collects:
+
+Pods
+Persistent volume claims
+Resource quota details
+Recent namespace events
+Helm release status
+
+
+Dashboard Pipeline
+The dashboard pipeline imports or updates dashboards for the observability stack.
+Trigger
+Runs manually through workflow dispatch.
+Deployment
+The workflow:
+
+Authenticates to AWS
+Connects to EKS
+Requires the Grafana admin password secret
+Runs the dashboard import script
+
+Failure Diagnostics
+On failure, it collects observability namespace state and Helm release details.
+
+Argo CD Status Pipeline
+The Argo CD status workflow is read-only and used for operational checks.
+Trigger
+Runs manually through workflow dispatch.
+Checks
+The workflow:
+
+Connects to the EKS cluster
+Refreshes the IBTS Argo CD application
+Waits for sync and health status
+Checks whether ignore differences configuration is present
+Prints the latest Argo CD operation state
+Runs Argo CD diff in core mode
+Prints deployment field managers
+Searches controller logs for selected application resources
+
+This workflow is useful for diagnosing GitOps drift, sync issues, and controller behavior.
+
+CI/CD Security Controls
+The pipelines include the following controls:
+
+AWS authentication uses GitHub Actions OIDC.
+Long-lived AWS access keys are not required in GitHub Actions.
+GitHub environments are used for infrastructure workflows.
+Terraform plan and apply are separated.
+Terraform apply uses uploaded plan artifacts.
+Manual confirmation is required for infrastructure, Argo CD, load balancer, observability, and destroy workflows.
+Destroy requires exact DESTROY confirmation.
+Docker Hub credentials are stored in GitHub secrets.
+Grafana admin password is required through GitHub secrets.
+Secret scanning runs in the application CI pipeline.
+Image digest records are generated for audit traceability.
+Kubernetes manifests are updated with Git SHA image tags.
+Lint and SAST are advisory, while tests and Docker builds are blocking.
+
+
+Deployment Flow
+The expected deployment flow is:
+
+Developer opens or updates a pull request.
+PR checks run lint, SAST, tests, Docker build, and PR summary.
+After merge to main, the application CI pipeline builds and pushes service images.
+The pipeline records image digests for audit.
+The pipeline updates Kubernetes manifests with the new Git SHA image tags.
+Terraform infrastructure workflows provision or update AWS and EKS resources when required.
+Argo CD deploys the application from Git.
+The load balancer workflow exposes the API Gateway after the service has ready endpoints.
+Observability and dashboard workflows deploy monitoring, logging, tracing, and dashboard configuration.
+The Argo CD status workflow can be used to validate sync and health.
+
+
+Artifacts and Audit Outputs
+The pipelines generate the following artifacts:
+
+
+
+Artifact
+Source Pipeline
+Purpose
+
+
+
+
+Terraform plan files
+Terraform workflows
+Ensures apply uses the reviewed plan
+
+
+Coverage XML
+PR checks and application CI
+Test coverage reporting
+
+
+JUnit XML
+PR checks and application CI
+Unit test result reporting
+
+
+Bandit JSON
+PR checks and application CI
+SAST reporting
+
+
+Docker image digest JSON
+Application CI
+Image audit traceability
+
+
+Combined audit bundle
+Application CI
+Consolidated image build audit record
+
+
+
+
+Rollback Approach
+Application rollback can be handled through GitOps by reverting the Kubernetes manifest change to a previous image SHA and allowing Argo CD to reconcile the application.
+Infrastructure rollback should be handled by reverting Terraform changes in Git and applying the corrected Terraform plan.
+For destructive rollback or teardown, the manual destroy workflow should be used only after confirming the target environment and resource scope.
