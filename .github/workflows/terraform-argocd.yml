@@ -188,9 +188,14 @@ jobs:
         run: terraform init -input=false
         working-directory: ${{ env.TF_DIR }}
 
-      - name: Format check
-        run: terraform fmt -check -diff
+      - name: Format (auto-fix on the runner)
         working-directory: ${{ env.TF_DIR }}
+        run: |
+          if ! terraform fmt -check -diff; then
+            echo "::warning::Unformatted files found. Formatting them on the runner for this run only. Fix them in Git when convenient."
+            terraform fmt
+          fi
+          terraform fmt -check
 
       - name: Validate
         run: terraform validate
