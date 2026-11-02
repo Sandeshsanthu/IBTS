@@ -98,6 +98,7 @@ resource "helm_release" "argocd_apps" {
           group        = "apps"
           kind         = "Deployment"
           jsonPointers = ["/spec/template/metadata/annotations/kubectl.kubernetes.io~1restartedAt"]
+          managedFieldsManagers = ["kubectl-rollout"]
         }]
       }
     }

@@ -20,7 +20,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: bank-adapter
-          image: sandeshs/ibts-bank-adapter:b2cad14536e18c2ab3c6ef70e6ee7934f332964b
+          image: sandeshs/ibts-bank-adapter:dcd350339efcded179af47e0a55e038809b4a0e7
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
