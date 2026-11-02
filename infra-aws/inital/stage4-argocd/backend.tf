@@ -22,7 +22,7 @@ terraform {
   backend "s3" {
     bucket       = "sandesh-tf-file"
     key          = "ibts/stage4-argocd/terraform.tfstate" # must differ from stages 1-3
-    region       = "ap-south-2"
+    region       = "us-east-1"  
     encrypt      = true
     use_lockfile = true # if stage 1 uses DynamoDB, replace this line with: dynamodb_table = "<same table name as stage 1>"
   }
