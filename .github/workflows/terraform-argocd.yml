@@ -52,7 +52,6 @@ env:
   AWS_REGION: "ap-south-2"
   CLUSTER_NAME: "ibts-eks"
   TF_DIR: infra-aws/inital/stage4-argocd
-  TF_STATE_KEY: "ibts/stage4-argocd/terraform.tfstate"
   TF_VAR_aws_region: "ap-south-2"
   TF_VAR_cluster_name: "ibts-eks"
   TF_VAR_git_repo_url: ${{ github.server_url }}/${{ github.repository }}.git
@@ -99,6 +98,15 @@ jobs:
             echo "::error::This repo is private but stage 4 has no repository credential. Make it public or add the credential back."
             exit 1
           fi
+
+      - name: Backend config sanity check
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          if grep -q 'REPLACE-WITH' backend.tf; then
+            echo "::error::backend.tf still has the placeholder bucket name. Put the real stage 1 bucket in infra-aws/inital/stage4-argocd/backend.tf."
+            exit 1
+          fi
+          grep -E '^[[:space:]]*(bucket|key|region|use_lockfile|dynamodb_table)[[:space:]]*=' backend.tf
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -176,21 +184,9 @@ jobs:
             exit 1
           fi
 
-      - name: Init backend
-        env:
-          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      - name: Init
+        run: terraform init -input=false
         working-directory: ${{ env.TF_DIR }}
-        run: |
-          if [ -z "$TF_STATE_BUCKET" ]; then
-            echo "::error::Set the TF_STATE_BUCKET repository variable (same bucket as stage 1)."
-            exit 1
-          fi
-          terraform init -input=false \
-            -backend-config="bucket=$TF_STATE_BUCKET" \
-            -backend-config="key=$TF_STATE_KEY" \
-            -backend-config="region=$AWS_REGION" \
-            -backend-config="encrypt=true" \
-            -backend-config="use_lockfile=true"
 
       - name: Format check
         run: terraform fmt -check -diff
@@ -253,17 +249,9 @@ jobs:
           name: tfplan-stage4
           path: ${{ env.TF_DIR }}
 
-      - name: Init backend
-        env:
-          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      - name: Init
+        run: terraform init -input=false
         working-directory: ${{ env.TF_DIR }}
-        run: |
-          terraform init -input=false \
-            -backend-config="bucket=$TF_STATE_BUCKET" \
-            -backend-config="key=$TF_STATE_KEY" \
-            -backend-config="region=$AWS_REGION" \
-            -backend-config="encrypt=true" \
-            -backend-config="use_lockfile=true"
 
       - name: Apply
         run: terraform apply -input=false tfplan-stage4
