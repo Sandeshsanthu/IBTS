@@ -22,8 +22,8 @@ terraform {
   backend "s3" {
     bucket       = "sandesh-tf-file"
     key          = "ibts/stage4-argocd/terraform.tfstate"
-    region       = "us-east-1"  
+    region       = "us-east-1"
     encrypt      = true
-    use_lockfile = true 
+    use_lockfile = true
   }
 }
