@@ -55,6 +55,14 @@ jobs:
           ./argocd login --core
           ./argocd app diff ibts-app --core || true
 
+      - name: Field managers on the Deployments
+        run: |
+          for d in api-gateway mock-bank-server bank-adapter; do
+            echo "--- $d ---"
+            kubectl -n ibts-app get deploy "$d" -o json --show-managed-fields \
+              | jq -r '.metadata.managedFields[] | "\(.manager)  \(.operation)  \(.time)"'
+          done
+
       - name: Controller log lines about the two Deployments
         continue-on-error: true
         run: |
