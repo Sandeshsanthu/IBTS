@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: sandeshs/ibts-api-gateway:9e391d56cf13c4663f3b86d6789a3fa0e01307cd
+          image: sandeshs/ibts-api-gateway:8e7cf6073593856b1bf88b8254c9617a88a4ebf8
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

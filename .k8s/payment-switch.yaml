@@ -22,7 +22,7 @@ spec:
       serviceAccountName: payment-switch
       containers:
         - name: payment-switch
-          image: sandeshs/ibts-payment-switch:bf0c6a7213d8fee56aa47b8961a652f5c3136202
+          image: sandeshs/ibts-payment-switch:8e7cf6073593856b1bf88b8254c9617a88a4ebf8
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

@@ -24,7 +24,7 @@ spec:
       serviceAccountName: idempotency-guard
       containers:
         - name: idempotency-guard
-          image: sandeshs/ibts-idempotency-guard:e3b7870036107c3e53c6e945ca7ff98e8848f1f8
+          image: sandeshs/ibts-idempotency-guard:8e7cf6073593856b1bf88b8254c9617a88a4ebf8
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
