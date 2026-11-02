@@ -10,3 +10,6 @@ kubectl rollout restart deploy/api-gateway -n ibts-app
 kubectl rollout status deploy/api-gateway -n ibts-app --timeout=240s
 
  kubectl get secret api-gateway-secrets -n ibts-app -o json | jq -r '.data | to_entries[] | "\(.key) len=\(.value | @base64d | length)"'
+
+ kubectl -n ibts-app get secret api-gateway-secrets -o jsonpath='{.data.API_KEY}' | base64 -d; echo
+ $env:IBTS_API_KEY =

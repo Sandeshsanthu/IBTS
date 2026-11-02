@@ -22,9 +22,9 @@ resource "kubernetes_resource_quota" "ibts_app" {
   }
   spec {
     hard = {
-      "requests.cpu"    = "2"
+      "requests.cpu"    = "3"
       "requests.memory" = "4Gi"
-      "limits.cpu"      = "4"
+      "limits.cpu"      = "8"
       "limits.memory"   = "6Gi"
       "pods"            = "20"
     }
