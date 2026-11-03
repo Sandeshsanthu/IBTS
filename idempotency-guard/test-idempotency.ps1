@@ -1,7 +1,7 @@
-﻿param([string]$BaseUrl = "http://localhost:8080")
+param([string]$BaseUrl = "http://localhost:8080")
 
 $pass = 0; $fail = 0
-$run  = Get-Date -Format "yyyyMMddHHmmss"   # unique per run — avoids stale key collisions
+$run  = Get-Date -Format "yyyyMMddHHmmss"   # unique per run � avoids stale key collisions
 $key1 = "txn-test-$run-001"
 $key2 = "txn-test-$run-002"
 
@@ -144,3 +144,4 @@ Write-Host " RESULTS: $pass/$total passed" -ForegroundColor $(if ($fail -eq 0) {
 if ($fail -gt 0) { Write-Host " $fail test(s) FAILED - review output above" -ForegroundColor Red }
 else             { Write-Host " All tests passed - service is healthy" -ForegroundColor Green }
 Write-Host "======================================" -ForegroundColor White
+

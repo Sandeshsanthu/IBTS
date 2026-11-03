@@ -110,3 +110,5 @@ class TestVerifyAuthJwt:
         with pytest.raises(HTTPException) as exc:
             await verify_auth(req)
         assert exc.value.status_code == 401
+
+

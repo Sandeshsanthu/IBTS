@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "yesbank-txn-fallback-success",
   "request": {
     "method": "POST",
@@ -15,3 +15,4 @@
     }
   }
 }
+

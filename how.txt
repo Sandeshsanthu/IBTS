@@ -295,3 +295,4 @@ try {
 docker start mock-bank-server
 Write-Host "Mock bank restarted" -ForegroundColor Green
 
+

@@ -1,4 +1,4 @@
-﻿# Testing
+# Testing
 pytest==8.2.0
 pytest-cov==5.0.0
 pytest-mock==3.14.0
@@ -10,3 +10,4 @@ anyio[trio]==4.3.0
 ruff==0.4.4
 black==24.4.2
 mypy==1.10.0
+

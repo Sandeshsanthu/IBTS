@@ -167,3 +167,5 @@ class TestRateLimitMiddleware:
             resp = client.get("/payments")
         assert resp.status_code == 200
         redis.expire.assert_called()
+
+

@@ -116,3 +116,5 @@ class TestRateLimiterCheckVpa:
         key_bob = fake_redis._r.pipeline.return_value.zadd.call_args[0][0]
 
         assert key_alice != key_bob
+
+

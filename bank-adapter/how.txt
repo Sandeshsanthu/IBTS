@@ -7,3 +7,4 @@ PS C:\Users\sandeshs\IBTS\bank-adapter> aws dynamodb list-tables `
         "routing-table"
     ]
 }
+

@@ -1,4 +1,4 @@
-﻿name: IBTS Build, Test, and Push
+name: IBTS Build, Test, and Push
 
 on:
   push:
@@ -178,7 +178,7 @@ jobs:
           path: ${{ matrix.dir }}/junit.xml
           retention-days: 14
 
-  # ── DOCKER BUILD + PUSH with SHA256 digest capture for auditing ───────────
+  # -- DOCKER BUILD + PUSH with SHA256 digest capture for auditing -----------
   docker-build-push:
     name: Docker - ${{ matrix.service }}
     runs-on: ubuntu-latest
@@ -225,7 +225,7 @@ jobs:
 
       - name: Build and push ${{ matrix.service }}
         if: steps.df_check.outputs.exists == 'true'
-        id: push                                         # ← id needed to capture digest
+        id: push                                         # ? id needed to capture digest
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -237,7 +237,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to:   type=gha,mode=max,scope=${{ matrix.service }}
 
-      # ── Capture SHA256 digest for audit trail ──────────────────────────────
+      # -- Capture SHA256 digest for audit trail ------------------------------
       - name: Write image digest audit record
         if: steps.df_check.outputs.exists == 'true'
         run: |
@@ -265,9 +265,9 @@ jobs:
         with:
           name: digest-${{ matrix.service }}
           path: audit/${{ matrix.service }}-digest.json
-          retention-days: 90                             # ← keep audit records 90 days
+          retention-days: 90                             # ? keep audit records 90 days
 
-  # ── AUDIT SUMMARY — combines all digest records ───────────────────────────
+  # -- AUDIT SUMMARY � combines all digest records ---------------------------
   audit-summary:
     name: Build Audit Summary
     runs-on: ubuntu-latest
@@ -350,3 +350,4 @@ jobs:
             git commit -m "chore: deploy ibts ${GITHUB_SHA:0:7} [skip ci]"
             git push
           fi
+

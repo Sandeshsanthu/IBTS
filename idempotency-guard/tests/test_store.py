@@ -140,3 +140,4 @@ class TestScanAll:
         from app import store
         result = store.scan_all()
         assert result == []
+
