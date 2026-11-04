@@ -54,7 +54,7 @@ jobs:
       - name: Authenticate with AWS via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          role-to-assume: "null"
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "TerraformStage2Destroy"
 
@@ -118,7 +118,7 @@ jobs:
       - name: Authenticate with AWS via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          role-to-assume: "null"
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "TerraformStage1Destroy"
 

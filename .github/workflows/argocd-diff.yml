@@ -22,7 +22,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          role-to-assume: "null"
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "ArgoDiff"
 

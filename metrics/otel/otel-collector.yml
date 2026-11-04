@@ -1,5 +1,3 @@
-filename: metrics/otel/otel-collector.yml
-
 receivers:
   otlp:
     protocols:

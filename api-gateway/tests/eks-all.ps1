@@ -11,7 +11,7 @@
 #   .\eks-all.ps1 -IncludeBreaker -IncludeRateLimit -ReportPath .\result.json
 [CmdletBinding()]
 param(
-    [string]$BaseUrl = $(if ($env:IBTS_BASE_URL) { $env:IBTS_BASE_URL } else { "http://ibts-eks-api-alb-1475829692.ap-south-2.elb.amazonaws.com" }),
+    [string]$BaseUrl = $(if ($env:IBTS_BASE_URL) { $env:IBTS_BASE_URL } else { "http://ibts-eks-api-alb-1522208447.ap-south-2.elb.amazonaws.com" }),
     [string]$ApiKey  = $env:IBTS_API_KEY,
     [string]$ApiKey2 = $env:IBTS_API_KEY_2,
     [switch]$IncludeBreaker,

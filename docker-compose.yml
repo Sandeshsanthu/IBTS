@@ -56,7 +56,7 @@ services:
       - ibts-network
 
   # ---------------------------------------------
-  # APP SERVICES — using Docker Hub images
+  # APP SERVICES ï¿½ using Docker Hub images
   # ---------------------------------------------
 
   idempotency-guard:

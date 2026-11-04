@@ -40,7 +40,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          role-to-assume: "null"
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "Stage1Plan"
 
@@ -81,7 +81,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          role-to-assume: "null"
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "Stage1Apply"
 
@@ -117,7 +117,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          role-to-assume: "null"
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "Stage2Plan"
 
@@ -169,7 +169,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          role-to-assume: "null"
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "Stage2Apply"
 
@@ -235,7 +235,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: "arn:aws:iam::149614785419:role/github-actions-terraform-role"
+          role-to-assume: "null"
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: "DeployObservability"
 
